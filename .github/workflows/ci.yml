@@ -1,0 +1,52 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+jobs:
+  ci:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9.12.0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Typecheck
+        run: pnpm typecheck
+
+      - name: Lint
+        run: pnpm lint
+
+      - name: Test
+        run: pnpm test
+
+      - name: Build widget
+        run: pnpm --filter @velobot/widget build
+
+      # `next build` runs its own stricter checks beyond `tsc --noEmit` —
+      # e.g. Route Handler export shape and useSearchParams/Suspense
+      # requirements for statically-generated pages. Catching these here is
+      # the whole reason this step exists: this exact check caught two
+      # real pre-existing production-build failures (in /login and
+      # /accept-invite) that had never been caught before this CI existed.
+      - name: Build web
+        run: pnpm --filter @velobot/web build
+        env:
+          NEXT_PUBLIC_SUPABASE_URL: https://placeholder.supabase.co
+          NEXT_PUBLIC_SUPABASE_ANON_KEY: placeholder
+          SUPABASE_SERVICE_ROLE_KEY: placeholder
+          OPENAI_API_KEY: placeholder
+          STRIPE_SECRET_KEY: sk_test_placeholder
+          NEXT_PUBLIC_APP_URL: http://localhost:3000
