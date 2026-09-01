@@ -1,7 +1,15 @@
 import { withSentryConfig } from "@sentry/nextjs";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 /** @type {import('next').NextConfig} */
 const nextConfig = {
+  output: "standalone",
+  // Needed so Next's file tracer picks up @velobot/shared from the pnpm
+  // workspace root instead of assuming apps/web is the whole repo.
+  outputFileTracingRoot: path.join(__dirname, "../../"),
   transpilePackages: ["@velobot/shared"],
   experimental: {
     serverComponentsExternalPackages: ["pdf-parse", "mammoth"],
