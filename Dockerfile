@@ -40,6 +40,10 @@ ENV NEXT_PUBLIC_APP_URL=$NEXT_PUBLIC_APP_URL \
 
 RUN pnpm --filter @velobot/web... build
 
+# apps/web has no public/ directory (no static assets committed) — make sure
+# it exists so the runner stage's COPY below doesn't fail on a missing path.
+RUN mkdir -p apps/web/public
+
 FROM base AS runner
 WORKDIR /app
 ENV NODE_ENV=production
