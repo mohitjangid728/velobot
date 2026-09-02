@@ -8,7 +8,7 @@ import { trackEvent } from "@/lib/analytics/posthog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { AuthShell } from "@/components/auth/auth-shell";
 
 export default function SignupPage() {
   const router = useRouter();
@@ -48,55 +48,52 @@ export default function SignupPage() {
   }
 
   return (
-    <main className="flex min-h-screen items-center justify-center px-4">
-      <Card className="w-full max-w-sm">
-        <CardHeader>
-          <CardTitle>Create your account</CardTitle>
-          <CardDescription>Start building your first AI support bot.</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <form onSubmit={handleSubmit} className="flex flex-col gap-4">
-            <div className="flex flex-col gap-1.5">
-              <Label htmlFor="email">Email</Label>
-              <Input id="email" type="email" required value={email} onChange={(e) => setEmail(e.target.value)} />
-            </div>
-            <div className="flex flex-col gap-1.5">
-              <Label htmlFor="password">Password</Label>
-              <Input id="password" type="password" minLength={8} required value={password} onChange={(e) => setPassword(e.target.value)} />
-            </div>
-            <label className="flex items-start gap-2 text-sm text-muted-foreground">
-              <input
-                type="checkbox"
-                checked={agreed}
-                onChange={(e) => setAgreed(e.target.checked)}
-                className="mt-0.5 h-4 w-4 shrink-0 rounded border-input accent-primary"
-              />
-              <span>
-                I agree to the{" "}
-                <Link href="/legal/terms" className="text-primary underline-offset-4 hover:underline">
-                  Terms of Service
-                </Link>{" "}
-                and{" "}
-                <Link href="/legal/privacy" className="text-primary underline-offset-4 hover:underline">
-                  Privacy Policy
-                </Link>
-                .
-              </span>
-            </label>
-            {error && <p className="text-sm text-destructive">{error}</p>}
-            {notice && <p className="text-sm text-emerald-600">{notice}</p>}
-            <Button type="submit" disabled={loading || !agreed}>
-              {loading ? "Creating account..." : "Create account"}
-            </Button>
-          </form>
-          <p className="mt-4 text-center text-sm text-muted-foreground">
-            Already have an account?{" "}
-            <Link href="/login" className="text-primary underline-offset-4 hover:underline">
-              Sign in
+    <AuthShell
+      title="Create your account"
+      description="Start building your first AI support bot."
+      footer={
+        <>
+          Already have an account?{" "}
+          <Link href="/login" className="font-medium text-primary underline-offset-4 hover:underline">
+            Sign in
+          </Link>
+        </>
+      }
+    >
+      <form onSubmit={handleSubmit} className="flex flex-col gap-4">
+        <div className="flex flex-col gap-1.5">
+          <Label htmlFor="email">Email</Label>
+          <Input id="email" type="email" required value={email} onChange={(e) => setEmail(e.target.value)} />
+        </div>
+        <div className="flex flex-col gap-1.5">
+          <Label htmlFor="password">Password</Label>
+          <Input id="password" type="password" minLength={8} required value={password} onChange={(e) => setPassword(e.target.value)} />
+        </div>
+        <label className="flex items-start gap-2 text-sm text-muted-foreground">
+          <input
+            type="checkbox"
+            checked={agreed}
+            onChange={(e) => setAgreed(e.target.checked)}
+            className="mt-0.5 h-4 w-4 shrink-0 rounded border-input accent-primary"
+          />
+          <span>
+            I agree to the{" "}
+            <Link href="/legal/terms" className="text-primary underline-offset-4 hover:underline">
+              Terms of Service
+            </Link>{" "}
+            and{" "}
+            <Link href="/legal/privacy" className="text-primary underline-offset-4 hover:underline">
+              Privacy Policy
             </Link>
-          </p>
-        </CardContent>
-      </Card>
-    </main>
+            .
+          </span>
+        </label>
+        {error && <p className="text-sm text-destructive">{error}</p>}
+        {notice && <p className="text-sm text-status-good">{notice}</p>}
+        <Button type="submit" disabled={loading || !agreed} size="lg" className="mt-1">
+          {loading ? "Creating account..." : "Create account"}
+        </Button>
+      </form>
+    </AuthShell>
   );
 }

@@ -7,7 +7,7 @@ import { createSupabaseBrowserClient } from "@/lib/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { AuthShell } from "@/components/auth/auth-shell";
 
 // Seeded by apps/web/scripts/seed-test-accounts.mjs — keep these in sync
 // with that script if you ever change them. Customer/Admin/Agent live in the
@@ -82,62 +82,59 @@ function LoginForm() {
   }
 
   return (
-    <main className="flex min-h-screen items-center justify-center px-4">
-      <Card className="w-full max-w-sm">
-        <CardHeader>
-          <CardTitle>Sign in</CardTitle>
-          <CardDescription>Welcome back to VeloBot.</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <form onSubmit={handleSubmit} className="flex flex-col gap-4">
-            <div className="flex flex-col gap-1.5">
-              <Label htmlFor="email">Email</Label>
-              <Input id="email" type="email" required value={email} onChange={(e) => setEmail(e.target.value)} />
-            </div>
-            <div className="flex flex-col gap-1.5">
-              <Label htmlFor="password">Password</Label>
-              <Input id="password" type="password" required value={password} onChange={(e) => setPassword(e.target.value)} />
-            </div>
-            {error && <p className="text-sm text-destructive">{error}</p>}
-            <Button type="submit" disabled={loading}>
-              {loading ? "Signing in..." : "Sign in"}
-            </Button>
-          </form>
-          <p className="mt-4 text-center text-sm text-muted-foreground">
-            No account?{" "}
-            <Link href="/signup" className="text-primary underline-offset-4 hover:underline">
-              Create one
-            </Link>
-          </p>
+    <AuthShell
+      title="Sign in"
+      description="Welcome back to VeloBot."
+      footer={
+        <>
+          No account?{" "}
+          <Link href="/signup" className="font-medium text-primary underline-offset-4 hover:underline">
+            Create one
+          </Link>
+        </>
+      }
+    >
+      <form onSubmit={handleSubmit} className="flex flex-col gap-4">
+        <div className="flex flex-col gap-1.5">
+          <Label htmlFor="email">Email</Label>
+          <Input id="email" type="email" required value={email} onChange={(e) => setEmail(e.target.value)} />
+        </div>
+        <div className="flex flex-col gap-1.5">
+          <Label htmlFor="password">Password</Label>
+          <Input id="password" type="password" required value={password} onChange={(e) => setPassword(e.target.value)} />
+        </div>
+        {error && <p className="text-sm text-destructive">{error}</p>}
+        <Button type="submit" disabled={loading} size="lg" className="mt-1">
+          {loading ? "Signing in..." : "Sign in"}
+        </Button>
+      </form>
 
-          {process.env.NODE_ENV !== "production" && (
-            <div className="mt-6 border-t pt-4">
-              <p className="mb-2 text-center text-xs font-medium uppercase text-muted-foreground">
-                Test accounts (dev only)
-              </p>
-              <div className="flex flex-col gap-2">
-                {TEST_ACCOUNTS.map((account) => (
-                  <button
-                    key={account.email}
-                    type="button"
-                    disabled={loading}
-                    onClick={() => performSignIn(account.email, account.password, account.redirectTo)}
-                    className="flex flex-col rounded-md border px-3 py-2 text-left text-xs transition-colors hover:bg-secondary/60 disabled:opacity-50"
-                  >
-                    <span className="font-medium text-foreground">{account.label}</span>
-                    <span className="text-muted-foreground">
-                      {account.email} · {account.password}
-                    </span>
-                  </button>
-                ))}
-              </div>
-              <p className="mt-2 text-center text-[11px] text-muted-foreground">
-                Seeded via <code>apps/web/scripts/seed-test-accounts.mjs</code>
-              </p>
-            </div>
-          )}
-        </CardContent>
-      </Card>
-    </main>
+      {process.env.NODE_ENV !== "production" && (
+        <div className="mt-8 rounded-xl border bg-muted/40 p-4">
+          <p className="mb-3 text-center text-xs font-medium uppercase tracking-wide text-muted-foreground">
+            Test accounts (dev only)
+          </p>
+          <div className="flex flex-col gap-2">
+            {TEST_ACCOUNTS.map((account) => (
+              <button
+                key={account.email}
+                type="button"
+                disabled={loading}
+                onClick={() => performSignIn(account.email, account.password, account.redirectTo)}
+                className="flex flex-col rounded-lg border bg-card px-3 py-2 text-left text-xs shadow-subtle transition-all hover:-translate-y-0.5 hover:shadow-card-hover disabled:opacity-50"
+              >
+                <span className="font-medium text-foreground">{account.label}</span>
+                <span className="text-muted-foreground">
+                  {account.email} · {account.password}
+                </span>
+              </button>
+            ))}
+          </div>
+          <p className="mt-3 text-center text-[11px] text-muted-foreground">
+            Seeded via <code>apps/web/scripts/seed-test-accounts.mjs</code>
+          </p>
+        </div>
+      )}
+    </AuthShell>
   );
 }

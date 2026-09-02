@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { AuthShell } from "@/components/auth/auth-shell";
 
 export default function OnboardingPage() {
   const router = useRouter();
@@ -33,25 +33,17 @@ export default function OnboardingPage() {
   }
 
   return (
-    <main className="flex min-h-screen items-center justify-center px-4">
-      <Card className="w-full max-w-sm">
-        <CardHeader>
-          <CardTitle>Create your workspace</CardTitle>
-          <CardDescription>You&apos;ll be its Admin — you can invite teammates after.</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <form onSubmit={handleSubmit} className="flex flex-col gap-4">
-            <div className="flex flex-col gap-1.5">
-              <Label htmlFor="name">Workspace name</Label>
-              <Input id="name" required minLength={2} placeholder="Acme Inc." value={name} onChange={(e) => setName(e.target.value)} />
-            </div>
-            {error && <p className="text-sm text-destructive">{error}</p>}
-            <Button type="submit" disabled={loading}>
-              {loading ? "Creating..." : "Create workspace"}
-            </Button>
-          </form>
-        </CardContent>
-      </Card>
-    </main>
+    <AuthShell title="Create your workspace" description="You'll be its Admin — you can invite teammates after.">
+      <form onSubmit={handleSubmit} className="flex flex-col gap-4">
+        <div className="flex flex-col gap-1.5">
+          <Label htmlFor="name">Workspace name</Label>
+          <Input id="name" required minLength={2} placeholder="Acme Inc." value={name} onChange={(e) => setName(e.target.value)} />
+        </div>
+        {error && <p className="text-sm text-destructive">{error}</p>}
+        <Button type="submit" disabled={loading} size="lg" className="mt-1">
+          {loading ? "Creating..." : "Create workspace"}
+        </Button>
+      </form>
+    </AuthShell>
   );
 }
