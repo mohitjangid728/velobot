@@ -45,3 +45,16 @@ jobs:
             NEXT_PUBLIC_POSTHOG_KEY=${{ secrets.NEXT_PUBLIC_POSTHOG_KEY }}
             NEXT_PUBLIC_POSTHOG_HOST=${{ secrets.NEXT_PUBLIC_POSTHOG_HOST }}
             NEXT_PUBLIC_SENTRY_DSN=${{ secrets.NEXT_PUBLIC_SENTRY_DSN }}
+
+      # Coolify has no way to store a registry pull credential in this
+      # version, so the package must actually be public (not just showing
+      # "Public" while still inheriting the private repo's access) for it
+      # to pull. Force it here on every push rather than relying on a
+      # one-time manual toggle.
+      - name: Make GHCR package public
+        run: |
+          curl -sS -X PATCH \
+            -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" \
+            -H "Accept: application/vnd.github+json" \
+            "https://api.github.com/user/packages/container/velobot/visibility?visibility=public" \
+            -w "\nhttp_code:%{http_code}\n"
