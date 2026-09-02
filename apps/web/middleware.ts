@@ -4,7 +4,20 @@ import { updateSession } from "@/lib/supabase/middleware";
 // Accessible without a session. /onboarding is intentionally excluded — it
 // requires auth (POST /api/orgs checks for a user), so an unauthenticated
 // visitor should be sent to /login first, not shown the empty form.
-const PUBLIC_PATHS = ["/login", "/signup", "/accept-invite", "/pricing", "/legal"];
+const PUBLIC_PATHS = [
+  "/login",
+  "/signup",
+  "/accept-invite",
+  "/pricing",
+  "/legal",
+  // Next.js metadata route conventions (favicon.ico/icon.svg are already
+  // excluded by the matcher below since they have file extensions, but
+  // opengraph-image/twitter-image don't — social-media crawlers fetching
+  // them never carry a session, so without this they'd get redirected to
+  // /login instead of the image).
+  "/opengraph-image",
+  "/twitter-image",
+];
 
 export async function middleware(request: NextRequest) {
   const { response, user } = await updateSession(request);
