@@ -12,6 +12,7 @@ import { OrgAuditLog } from "@/components/admin/org-audit-log";
 import { OrgNotesCard } from "@/components/admin/org-notes-card";
 import { DeleteOrgDialog } from "@/components/admin/delete-org-dialog";
 import type { AdminOrgNote, Organization } from "@velobot/shared";
+import { getPlanOverride } from "@/lib/billing/plan-overrides";
 
 export default async function AdminOrgDetailPage({ params }: { params: { orgId: string } }) {
   const viewer = await requirePlatformAdmin();
@@ -22,12 +23,13 @@ export default async function AdminOrgDetailPage({ params }: { params: { orgId: 
   if (!org) notFound();
   const typedOrg = org as Organization;
 
-  const [{ data: members }, { data: bots }, usage, auditLog, { data: notes }] = await Promise.all([
+  const [{ data: members }, { data: bots }, usage, auditLog, { data: notes }, planOverrides] = await Promise.all([
     admin.from("org_members").select("*").eq("org_id", params.orgId).eq("status", "active"),
     admin.from("bots").select("*").eq("org_id", params.orgId),
     getUsageSummary(typedOrg),
     getAuditLogForOrg(params.orgId),
     admin.from("admin_org_notes").select("*").eq("org_id", params.orgId).order("created_at", { ascending: false }),
+    getPlanOverride(typedOrg.plan),
   ]);
 
   const membersWithEmail = await Promise.all(
@@ -50,7 +52,7 @@ export default async function AdminOrgDetailPage({ params }: { params: { orgId: 
       <OrgDetailPanel org={typedOrg} canManage={canManage} />
 
       <div className="grid gap-6 sm:grid-cols-2">
-        <OrgUsageCard org={typedOrg} usage={usage} />
+        <OrgUsageCard org={typedOrg} usage={usage} planOverrides={planOverrides} />
         <OrgBillingCard org={typedOrg} />
 
         <Card>

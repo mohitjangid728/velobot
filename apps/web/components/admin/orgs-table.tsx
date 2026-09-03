@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { format } from "date-fns";
 import { Search } from "lucide-react";
-import { PLANS, type Organization } from "@velobot/shared";
+import { getEffectivePlan, type Organization, type PlanOverrideMap } from "@velobot/shared";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -13,7 +13,7 @@ import type { UsageSummary } from "@/lib/billing/usage";
 
 export type OrgRow = Organization & { usage: UsageSummary };
 
-export function OrgsTable({ orgs, canManage }: { orgs: OrgRow[]; canManage: boolean }) {
+export function OrgsTable({ orgs, canManage, planOverrides }: { orgs: OrgRow[]; canManage: boolean; planOverrides?: PlanOverrideMap }) {
   const router = useRouter();
   const [query, setQuery] = useState("");
   const [selected, setSelected] = useState<Set<string>>(new Set());
@@ -107,7 +107,7 @@ export function OrgsTable({ orgs, canManage }: { orgs: OrgRow[]; canManage: bool
           </thead>
           <tbody className="divide-y bg-card">
             {filtered.map((org) => {
-              const plan = PLANS[org.plan];
+              const plan = getEffectivePlan(org.plan, planOverrides);
               return (
                 <tr key={org.id} className="hover:bg-muted/40">
                   {canManage && (

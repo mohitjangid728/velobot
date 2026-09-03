@@ -11,7 +11,7 @@ import { Input } from "@/components/ui/input";
 const ADMIN_NAV = [
   { href: "/admin", label: "Organizations", icon: Building2, exact: true },
   { href: "/admin/billing", label: "Billing", icon: CreditCard },
-  { href: "/admin/pricing", label: "Pricing", icon: CreditCard },
+  { href: "/admin/pricing", label: "Plans", icon: CreditCard },
   { href: "/admin/legal", label: "Legal pages", icon: FileText },
   { href: "/admin/coupons", label: "Coupons", icon: Tag },
   { href: "/admin/health", label: "System health", icon: Activity },

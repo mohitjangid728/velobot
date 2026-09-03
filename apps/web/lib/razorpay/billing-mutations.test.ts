@@ -26,6 +26,7 @@ function makeUpdateCapturingClient(extra: Record<string, unknown> = {}) {
         select: () => chain,
         eq: () => chain,
         single: () => chain,
+        maybeSingle: () => chain,
         then: (resolve: (v: unknown) => void) => resolve(extra[table] ?? { data: null, error: null }),
       };
       return chain;

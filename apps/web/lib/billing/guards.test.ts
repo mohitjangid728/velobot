@@ -41,13 +41,21 @@ function org(overrides: Partial<Organization>): Organization {
   };
 }
 
+/** guards.ts always queries plan_overrides right after organizations (loadOrgAndPlan) — every test here uses the static defaults, so that query always resolves to "no override row." */
+function mockClientFor(organization: Organization) {
+  return makeMockAdminClient({
+    organizations: makeQueryResult({ data: organization }),
+    plan_overrides: makeQueryResult({ data: null }),
+  });
+}
+
 beforeEach(() => {
   vi.clearAllMocks();
 });
 
 describe("assertCanCreateBot", () => {
   it("blocks bot creation at the plan's bot limit (hobby: 2)", async () => {
-    mockAdmin.client = makeMockAdminClient({ organizations: makeQueryResult({ data: org({ plan: "hobby" }) }) });
+    mockAdmin.client = mockClientFor(org({ plan: "hobby" }));
     vi.mocked(getBotCount).mockResolvedValue(2);
     const result = await assertCanCreateBot("org-1");
     expect(result.allowed).toBe(false);
@@ -55,8 +63,19 @@ describe("assertCanCreateBot", () => {
   });
 
   it("allows bot creation below the limit", async () => {
-    mockAdmin.client = makeMockAdminClient({ organizations: makeQueryResult({ data: org({ plan: "hobby" }) }) });
+    mockAdmin.client = mockClientFor(org({ plan: "hobby" }));
     vi.mocked(getBotCount).mockResolvedValue(1);
+    const result = await assertCanCreateBot("org-1");
+    expect(result.allowed).toBe(true);
+  });
+
+  it("uses a Super-Admin-edited quota override instead of the static default", async () => {
+    mockAdmin.client = makeMockAdminClient({
+      organizations: makeQueryResult({ data: org({ plan: "hobby" }) }),
+      // Hobby's static bot quota is 2 — an override bumps it to 10.
+      plan_overrides: makeQueryResult({ data: { tier: "hobby", quota_bots: 10 } }),
+    });
+    vi.mocked(getBotCount).mockResolvedValue(5);
     const result = await assertCanCreateBot("org-1");
     expect(result.allowed).toBe(true);
   });
@@ -64,9 +83,7 @@ describe("assertCanCreateBot", () => {
 
 describe("assertCanSendAiMessage", () => {
   it("falls back to the add-on balance once the base allowance is used up", async () => {
-    mockAdmin.client = makeMockAdminClient({
-      organizations: makeQueryResult({ data: org({ plan: "free", addon_message_balance: 5 }) }),
-    });
+    mockAdmin.client = mockClientFor(org({ plan: "free", addon_message_balance: 5 }));
     vi.mocked(getMessagesUsedThisPeriod).mockResolvedValue(50); // free tier limit
     const result = await assertCanSendAiMessage("org-1");
     expect(result.allowed).toBe(true);
@@ -74,9 +91,7 @@ describe("assertCanSendAiMessage", () => {
   });
 
   it("blocks once both the base allowance and the add-on balance are exhausted", async () => {
-    mockAdmin.client = makeMockAdminClient({
-      organizations: makeQueryResult({ data: org({ plan: "free", addon_message_balance: 0 }) }),
-    });
+    mockAdmin.client = mockClientFor(org({ plan: "free", addon_message_balance: 0 }));
     vi.mocked(getMessagesUsedThisPeriod).mockResolvedValue(50);
     const result = await assertCanSendAiMessage("org-1");
     expect(result.allowed).toBe(false);
@@ -86,12 +101,12 @@ describe("assertCanSendAiMessage", () => {
 
 describe("assertHasCapability", () => {
   it("grants apiAccess only on the business tier", async () => {
-    mockAdmin.client = makeMockAdminClient({ organizations: makeQueryResult({ data: org({ plan: "business" }) }) });
+    mockAdmin.client = mockClientFor(org({ plan: "business" }));
     expect((await assertHasCapability("org-1", "apiAccess")).allowed).toBe(true);
   });
 
   it("denies apiAccess on every plan below business", async () => {
-    mockAdmin.client = makeMockAdminClient({ organizations: makeQueryResult({ data: org({ plan: "growth" }) }) });
+    mockAdmin.client = mockClientFor(org({ plan: "growth" }));
     expect((await assertHasCapability("org-1", "apiAccess")).allowed).toBe(false);
   });
 });

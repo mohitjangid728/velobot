@@ -7,7 +7,8 @@ import { BotDetailTabs } from "@/components/dashboard/bot-detail-tabs";
 import { Badge } from "@/components/ui/badge";
 import { getPagesIndexed } from "@/lib/billing/usage";
 import { listWorkflowRules, getWorkflowRuleHitStats } from "@/lib/workflow/workflow-manager";
-import { PLANS } from "@velobot/shared";
+import { getEffectivePlan } from "@velobot/shared";
+import { getPlanOverride } from "@/lib/billing/plan-overrides";
 import type { Bot, KnowledgeSource, Queue } from "@velobot/shared";
 
 export default async function BotDetailPage({ params }: { params: { botId: string } }) {
@@ -24,7 +25,8 @@ export default async function BotDetailPage({ params }: { params: { botId: strin
     listWorkflowRules(params.botId),
     getWorkflowRuleHitStats(params.botId),
   ]);
-  const pagesLimit = PLANS[org.plan].quota.pages;
+  const effectivePlan = getEffectivePlan(org.plan, await getPlanOverride(org.plan));
+  const pagesLimit = effectivePlan.quota.pages;
 
   const typedBot = bot as Bot;
   const queueName = (queues ?? []).find((q) => q.id === typedBot.queue_id)?.name;
@@ -72,7 +74,7 @@ export default async function BotDetailPage({ params }: { params: { botId: strin
         pagesLimit={pagesLimit}
         workflowRules={workflowRules}
         workflowHitStats={Object.fromEntries(workflowHitStats)}
-        hasRemoveBranding={PLANS[org.plan].capabilities.removeBranding}
+        hasRemoveBranding={effectivePlan.capabilities.removeBranding}
       />
     </div>
   );

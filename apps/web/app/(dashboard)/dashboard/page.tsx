@@ -4,7 +4,8 @@ import { formatDistanceToNow } from "date-fns";
 import { Bot, MessagesSquare, CircleAlert, CheckCircle2, Users, ArrowUpRight } from "lucide-react";
 import { requireActiveOrg } from "@/lib/auth/session";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
-import { PLANS } from "@velobot/shared";
+import { getEffectivePlan } from "@velobot/shared";
+import { getPlanOverride } from "@/lib/billing/plan-overrides";
 import { StatTile } from "@/components/dashboard/stat-tile";
 import { AnalyticsPanel } from "@/components/dashboard/analytics-panel";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
@@ -61,7 +62,8 @@ export default async function DashboardOverviewPage() {
     : { data: [] };
   const botNameById = new Map((bots ?? []).map((b) => [b.id, b.name]));
 
-  const limits = PLANS[org.plan].quota;
+  const effectivePlan = getEffectivePlan(org.plan, await getPlanOverride(org.plan));
+  const limits = effectivePlan.quota;
 
   const [volume, deflection, sentiment, topIntents, averageRating] = await Promise.all([
     getConversationVolumeByDay(org.id),
@@ -155,7 +157,7 @@ export default async function DashboardOverviewPage() {
         <Card>
           <CardHeader>
             <CardTitle className="text-base">Workspace</CardTitle>
-            <CardDescription>{PLANS[org.plan].name} plan</CardDescription>
+            <CardDescription>{effectivePlan.name} plan</CardDescription>
           </CardHeader>
           <CardContent className="flex flex-col gap-4">
             <div className="flex items-center justify-between text-sm">

@@ -323,6 +323,23 @@ export const UpdatePlanPriceSchema = z.object({
 });
 export type UpdatePlanPriceInput = z.infer<typeof UpdatePlanPriceSchema>;
 
+// ── Plan quota/capability/feature/badge overrides (admin/pricing) ─────────
+// Every field optional — a PATCH only ever touches the fields the admin
+// actually changed; omitted fields keep whatever they were (static default
+// or a prior override), they are never reset to null by an unrelated edit.
+export const UpdatePlanDetailsSchema = z.object({
+  tier: z.enum(["free", "hobby", "growth", "business"]),
+  quota_bots: z.number().int().min(0).nullable().optional(),
+  quota_pages: z.number().int().min(0).nullable().optional(),
+  quota_messages_per_month: z.number().int().min(0).nullable().optional(),
+  quota_agent_seats: z.number().int().min(0).nullable().optional(),
+  capability_remove_branding: z.boolean().nullable().optional(),
+  capability_api_access: z.boolean().nullable().optional(),
+  features: z.array(z.string().min(1).max(120)).max(20).nullable().optional(),
+  badge_text: z.string().max(40).nullable().optional(),
+});
+export type UpdatePlanDetailsInput = z.infer<typeof UpdatePlanDetailsSchema>;
+
 // ── Legal pages (admin/legal) ──────────────────────────────────────────────
 export const UpdateLegalPageSchema = z.object({
   title: z.string().min(1).max(200),

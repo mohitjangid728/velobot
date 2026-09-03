@@ -1,14 +1,14 @@
 import Link from "next/link";
 import { AlertTriangle } from "lucide-react";
-import { PLANS } from "@velobot/shared";
+import { getEffectivePlan, type PlanOverrideMap } from "@velobot/shared";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import type { OrgRow } from "@/components/admin/orgs-table";
 
 const THRESHOLD = 0.9;
 
-function nearLimitReasons(org: OrgRow): string[] {
-  const plan = PLANS[org.plan];
+function nearLimitReasons(org: OrgRow, planOverrides?: PlanOverrideMap): string[] {
+  const plan = getEffectivePlan(org.plan, planOverrides);
   const messageLimit = plan.quota.messagesPerMonth + org.addon_message_balance;
   const reasons: string[] = [];
   if (messageLimit > 0 && org.usage.messagesThisPeriod / messageLimit >= THRESHOLD) {
@@ -23,8 +23,8 @@ function nearLimitReasons(org: OrgRow): string[] {
   return reasons;
 }
 
-export function NearLimitCard({ orgs }: { orgs: OrgRow[] }) {
-  const flagged = orgs.filter((o) => !o.suspended_at && nearLimitReasons(o).length > 0);
+export function NearLimitCard({ orgs, planOverrides }: { orgs: OrgRow[]; planOverrides?: PlanOverrideMap }) {
+  const flagged = orgs.filter((o) => !o.suspended_at && nearLimitReasons(o, planOverrides).length > 0);
 
   return (
     <Card>
@@ -43,7 +43,7 @@ export function NearLimitCard({ orgs }: { orgs: OrgRow[] }) {
           >
             <span className="font-medium text-primary">{org.name}</span>
             <span className="flex flex-wrap gap-1.5">
-              {nearLimitReasons(org).map((reason) => (
+              {nearLimitReasons(org, planOverrides).map((reason) => (
                 <Badge key={reason} variant="warning">
                   {reason}
                 </Badge>

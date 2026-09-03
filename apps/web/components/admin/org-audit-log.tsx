@@ -19,6 +19,7 @@ const ACTION_LABEL: Record<AdminAuditAction, string> = {
   "admin.promote": "promoted a Super Admin",
   "admin.demote": "removed a Super Admin",
   "plan.update_price": "updated plan pricing",
+  "plan.update_details": "updated plan quotas/capabilities/features",
   "legal.update_page": "edited a legal page",
   "coupon.create": "created a coupon",
   "coupon.revoke": "revoked a coupon",

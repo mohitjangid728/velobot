@@ -1,5 +1,5 @@
 import { Check } from "lucide-react";
-import { PLANS, getEffectivePrice, type PlanTier, type BillingInterval, type Currency, type PlanPriceOverrideMap } from "@velobot/shared";
+import { getEffectivePlan, getEffectivePrice, type PlanTier, type BillingInterval, type Currency, type PlanPriceOverrideMap, type PlanOverrideMap } from "@velobot/shared";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
@@ -14,6 +14,7 @@ export function PlanCard({
   highlighted,
   cta,
   priceOverrides,
+  planOverrides,
 }: {
   tier: PlanTier;
   interval: BillingInterval;
@@ -23,17 +24,24 @@ export function PlanCard({
   cta: React.ReactNode;
   /** Super-Admin-edited prices from admin/pricing — omit to use the static defaults in plans.ts. */
   priceOverrides?: PlanPriceOverrideMap;
+  /** Super-Admin-edited quotas/capabilities/features/badge from admin/pricing — omit to use the static defaults in plans.ts. */
+  planOverrides?: PlanOverrideMap;
 }) {
-  const plan = PLANS[tier];
+  const plan = getEffectivePlan(tier, planOverrides);
   const price = tier === "free" ? undefined : getEffectivePrice(tier, interval, currency, priceOverrides);
 
   return (
     <div
       className={cn(
-        "flex flex-col gap-4 rounded-xl border p-6",
+        "relative flex flex-col gap-4 rounded-xl border p-6",
         highlighted ? "border-primary shadow-md ring-1 ring-primary" : "border-border"
       )}
     >
+      {plan.badgeText && (
+        <span className="absolute -top-3 right-4 rounded-full bg-destructive px-2.5 py-1 text-xs font-bold text-destructive-foreground shadow-sm">
+          {plan.badgeText}
+        </span>
+      )}
       <div className="flex items-center justify-between">
         <h3 className="text-lg font-semibold">{plan.name}</h3>
         {isCurrent && <Badge variant="success">Current plan</Badge>}

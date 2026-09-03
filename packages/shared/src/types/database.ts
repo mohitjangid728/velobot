@@ -84,6 +84,7 @@ export type AdminAuditAction =
   | "admin.promote"
   | "admin.demote"
   | "plan.update_price"
+  | "plan.update_details"
   | "legal.update_page"
   | "coupon.create"
   | "coupon.revoke";
@@ -116,6 +117,21 @@ export interface PlanPriceOverride {
   amount: number;
   /** Filled in once a matching Razorpay Plan is created to charge this amount — null until then (see lib/billing/plan-pricing.ts). */
   razorpay_plan_id: string | null;
+  updated_by: string;
+  updated_at: string;
+}
+
+/** A Super-Admin-edited quota/capability/feature/badge override for one tier, independent of billing interval or currency — see ../plans.ts's getEffectivePlan(). Every field is nullable; null means "use the static default." */
+export interface PlanOverride {
+  tier: PlanTier;
+  quota_bots: number | null;
+  quota_pages: number | null;
+  quota_messages_per_month: number | null;
+  quota_agent_seats: number | null;
+  capability_remove_branding: boolean | null;
+  capability_api_access: boolean | null;
+  features: string[] | null;
+  badge_text: string | null;
   updated_by: string;
   updated_at: string;
 }

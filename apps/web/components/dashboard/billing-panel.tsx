@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { format } from "date-fns";
 import { CheckCircle2, Sparkles } from "lucide-react";
-import { PLANS, type Organization, type PlanTier, type BillingInterval, type Currency, type PlanPriceOverrideMap } from "@velobot/shared";
+import { getEffectivePlan, type Organization, type PlanTier, type BillingInterval, type Currency, type PlanPriceOverrideMap, type PlanOverrideMap } from "@velobot/shared";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -42,16 +42,18 @@ export function BillingPanel({
   org,
   usage,
   priceOverrides,
+  planOverrides,
 }: {
   org: Organization;
   usage: UsageSummary;
   priceOverrides?: PlanPriceOverrideMap;
+  planOverrides?: PlanOverrideMap;
 }) {
   const [pricingOpen, setPricingOpen] = useState(false);
   const [checkoutRequest, setCheckoutRequest] = useState<CheckoutSessionInput | null>(null);
   const [addonOpen, setAddonOpen] = useState<"messages" | "seat" | null>(null);
 
-  const plan = PLANS[org.plan];
+  const plan = getEffectivePlan(org.plan, planOverrides);
   const messageLimit = plan.quota.messagesPerMonth + org.addon_message_balance;
   const hasAddons = org.addon_message_balance > 0 || org.addon_seats > 0;
 
@@ -154,6 +156,7 @@ export function BillingPanel({
               mode="checkout"
               onSelectPlan={handleSelectPlan}
               priceOverrides={priceOverrides}
+              planOverrides={planOverrides}
             />
           </DialogBody>
         </DialogContent>

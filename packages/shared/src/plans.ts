@@ -141,3 +141,36 @@ export function yearlyMonthsFree(tier: Exclude<PlanTier, "free">, currency: Curr
   if (!monthly || yearly === undefined) return 0;
   return Math.round((monthly * 12 - yearly) / monthly);
 }
+
+/**
+ * Per-tier overrides for everything in PlanDefinition except pricing
+ * (which has its own PlanPriceOverrideMap above, since it also varies by
+ * interval/currency). Built by lib/billing/plan-overrides.ts's
+ * getPlanOverrides() from the plan_overrides table — this file stays a
+ * pure, isomorphic module with no DB access, same as the pricing side.
+ */
+export interface PlanOverrideFields {
+  quota?: Partial<PlanQuota>;
+  capabilities?: Partial<PlanCapabilities>;
+  features?: string[];
+  /** Promotional ribbon on this plan's pricing card, e.g. "20% OFF" — null/absent means no badge. */
+  badgeText?: string | null;
+}
+export type PlanOverrideMap = Partial<Record<PlanTier, PlanOverrideFields>>;
+
+export interface EffectivePlan extends PlanDefinition {
+  badgeText: string | null;
+}
+
+/** The plan actually enforced/displayed: static defaults with any Super-Admin-edited quota/capability/feature/badge fields merged on top. Every guard (lib/billing/guards.ts) and every plan display should go through this rather than reading PLANS[tier] directly, so an admin edit takes effect everywhere at once. Quota/capabilities merge key-by-key (a partial override doesn't blank out the rest); features/badgeText replace wholesale when set. */
+export function getEffectivePlan(tier: PlanTier, overrides?: PlanOverrideMap): EffectivePlan {
+  const base = PLANS[tier];
+  const o = overrides?.[tier];
+  return {
+    ...base,
+    quota: { ...base.quota, ...o?.quota },
+    capabilities: { ...base.capabilities, ...o?.capabilities },
+    features: o?.features ?? base.features,
+    badgeText: o?.badgeText ?? null,
+  };
+}

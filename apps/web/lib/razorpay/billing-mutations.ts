@@ -1,7 +1,8 @@
 import "server-only";
-import { PLANS, ADDONS } from "@velobot/shared";
+import { ADDONS, getEffectivePlan } from "@velobot/shared";
 import type { BillingInterval, Currency, PlanTier } from "@velobot/shared";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
+import { getPlanOverride } from "@/lib/billing/plan-overrides";
 
 /**
  * The single place both app/api/razorpay/verify/route.ts (client-driven,
@@ -33,13 +34,14 @@ export async function applyPlanActivation(
   }
 ): Promise<void> {
   const admin = createSupabaseAdminClient();
+  const plan = getEffectivePlan(params.tier, await getPlanOverride(params.tier));
   await admin
     .from("organizations")
     .update({
       plan: params.tier,
       billing_interval: params.interval,
       currency: params.currency,
-      seats_limit: PLANS[params.tier].quota.agentSeats,
+      seats_limit: plan.quota.agentSeats,
       razorpay_subscription_id: params.subscriptionId,
       payment_status: "active",
       ...periodFields(params.currentStart, params.currentEnd),
@@ -68,12 +70,13 @@ export async function applyAddonMessagesCredit(orgId: string, params: { quantity
 /** Fires on the PLAN subscription's cancellation/completion — Razorpay only sends this once a cancellation actually takes effect (immediately, or at cycle end for `cancel_at_cycle_end`), so "on cancelled" already IS "at cycle end". Already-purchased add-on balances aren't clawed back. */
 export async function resetOrgToFree(subscriptionId: string): Promise<void> {
   const admin = createSupabaseAdminClient();
+  const plan = getEffectivePlan("free", await getPlanOverride("free"));
   await admin
     .from("organizations")
     .update({
       plan: "free",
       billing_interval: "monthly",
-      seats_limit: PLANS.free.quota.agentSeats,
+      seats_limit: plan.quota.agentSeats,
       razorpay_subscription_id: null,
       current_period_start: null,
       current_period_end: null,

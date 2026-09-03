@@ -1,8 +1,9 @@
 import { NextResponse, type NextRequest } from "next/server";
-import { CreateOrgAdminSchema, PLANS } from "@velobot/shared";
+import { CreateOrgAdminSchema, getEffectivePlan } from "@velobot/shared";
 import { requireFullPlatformAdminApi } from "@/lib/auth/platform-admin";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { logAdminAction } from "@/lib/admin/audit-log";
+import { getPlanOverride } from "@/lib/billing/plan-overrides";
 
 /** Mirrors app/api/orgs/route.ts's self-signup slugify — kept separate since that route may evolve independently. */
 function slugify(name: string) {
@@ -23,13 +24,14 @@ export async function POST(req: NextRequest) {
   if (!parsed.success) return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 });
 
   const supabaseAdmin = createSupabaseAdminClient();
+  const plan = getEffectivePlan("free", await getPlanOverride("free"));
   const { data: org, error } = await supabaseAdmin
     .from("organizations")
     .insert({
       name: parsed.data.name,
       slug: parsed.data.slug || slugify(parsed.data.name),
       plan: "free",
-      seats_limit: PLANS.free.quota.agentSeats,
+      seats_limit: plan.quota.agentSeats,
     })
     .select()
     .single();

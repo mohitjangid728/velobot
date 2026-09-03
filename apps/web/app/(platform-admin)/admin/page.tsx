@@ -6,15 +6,17 @@ import { OrgsTable, type OrgRow } from "@/components/admin/orgs-table";
 import { NearLimitCard } from "@/components/admin/near-limit-card";
 import { CreateOrgDialog } from "@/components/admin/create-org-dialog";
 import { PLAN_TIERS, type Organization, type PlanTier } from "@velobot/shared";
+import { getPlanOverrides } from "@/lib/billing/plan-overrides";
 
 export default async function AdminOrgsPage() {
   const viewer = await requirePlatformAdmin();
   const canManage = viewer.platformAdminRole === "full";
   const admin = createSupabaseAdminClient();
 
-  const [{ data: orgs }, { count: totalBots }] = await Promise.all([
+  const [{ data: orgs }, { count: totalBots }, planOverrides] = await Promise.all([
     admin.from("organizations").select("*").order("created_at", { ascending: false }),
     admin.from("bots").select("id", { count: "exact", head: true }),
+    getPlanOverrides(),
   ]);
 
   const rows: OrgRow[] = await Promise.all(
@@ -44,9 +46,9 @@ export default async function AdminOrgsPage() {
 
       <AdminOverviewStats stats={stats} />
 
-      <NearLimitCard orgs={rows} />
+      <NearLimitCard orgs={rows} planOverrides={planOverrides} />
 
-      <OrgsTable orgs={rows} canManage={canManage} />
+      <OrgsTable orgs={rows} canManage={canManage} planOverrides={planOverrides} />
     </div>
   );
 }

@@ -1,10 +1,18 @@
-import { PLANS, type Organization } from "@velobot/shared";
+import { getEffectivePlan, type Organization, type PlanOverrideMap } from "@velobot/shared";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { QuotaBar } from "@/components/dashboard/billing-panel";
 import type { UsageSummary } from "@/lib/billing/usage";
 
-export function OrgUsageCard({ org, usage }: { org: Organization; usage: UsageSummary }) {
-  const plan = PLANS[org.plan];
+export function OrgUsageCard({
+  org,
+  usage,
+  planOverrides,
+}: {
+  org: Organization;
+  usage: UsageSummary;
+  planOverrides?: PlanOverrideMap;
+}) {
+  const plan = getEffectivePlan(org.plan, planOverrides);
   const messageLimit = plan.quota.messagesPerMonth + org.addon_message_balance;
 
   return (

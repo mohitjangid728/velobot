@@ -1,9 +1,10 @@
 import { NextResponse, type NextRequest } from "next/server";
-import { CreateOrgSchema } from "@velobot/shared";
+import { CreateOrgSchema, getEffectivePlan } from "@velobot/shared";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { ACTIVE_ORG_COOKIE, getCurrentUser } from "@/lib/auth/session";
 import { isPlatformAdmin } from "@/lib/auth/platform-admin";
+import { getPlanOverride } from "@/lib/billing/plan-overrides";
 
 function slugify(name: string) {
   return (
@@ -36,10 +37,11 @@ export async function POST(req: NextRequest) {
   // membership) would reject it. We verify identity above via the
   // cookie-backed session, then perform the writes with the admin client.
   const admin = createSupabaseAdminClient();
+  const plan = getEffectivePlan("free", await getPlanOverride("free"));
 
   const { data: org, error: orgError } = await admin
     .from("organizations")
-    .insert({ name: parsed.data.name, slug: slugify(parsed.data.name), plan: "free", seats_limit: 2 })
+    .insert({ name: parsed.data.name, slug: slugify(parsed.data.name), plan: "free", seats_limit: plan.quota.agentSeats })
     .select()
     .single();
   if (orgError || !org) {
