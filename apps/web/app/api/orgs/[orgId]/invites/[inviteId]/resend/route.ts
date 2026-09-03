@@ -2,16 +2,16 @@ import { NextResponse, type NextRequest } from "next/server";
 import { ROLE_RANK } from "@velobot/shared";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { getCurrentUser, getRoleForOrg } from "@/lib/auth/session";
-import { sendInviteEmail, isAlreadyRegisteredError } from "@/lib/notifications/invite-email";
+import { sendInviteEmail } from "@/lib/notifications/invite-email";
+import { generateInviteLink } from "@/lib/auth/generate-invite-link";
 
 const INVITE_TTL_MS = 7 * 24 * 60 * 60 * 1000;
 
 /**
- * Manual fallback for "the invite email never arrived" — re-sends via the
- * same path the original invite used (Supabase's mailer for a brand-new
- * email, our own Resend-based email for an existing user), refreshing
- * expires_at only if the invite had already expired so a still-valid link
- * isn't silently invalidated.
+ * Manual fallback for "the invite email never arrived" — re-sends the same
+ * branded Resend email as the original invite, refreshing expires_at only
+ * if the invite had already expired so a still-valid link isn't silently
+ * invalidated.
  */
 export async function POST(_req: NextRequest, { params }: { params: { orgId: string; inviteId: string } }) {
   const user = await getCurrentUser();
@@ -41,15 +41,14 @@ export async function POST(_req: NextRequest, { params }: { params: { orgId: str
       .eq("id", invite.id);
   }
 
+  const { data: org } = await admin.from("organizations").select("name").eq("id", params.orgId).single();
+
   const redirectTo = `${process.env.NEXT_PUBLIC_APP_URL}/accept-invite?token=${token}`;
-  const { error: mailError } = await admin.auth.admin.inviteUserByEmail(invite.email, { redirectTo });
-  if (mailError) {
-    if (!isAlreadyRegisteredError(mailError.message)) {
-      return NextResponse.json({ error: mailError.message }, { status: 500 });
-    }
-    // Same "already has an account" fallback as the original invite path.
-    await sendInviteEmail(invite.email, redirectTo, { existingUser: true });
+  const { actionLink, error: linkError } = await generateInviteLink(admin, invite.email, redirectTo);
+  if (linkError || !actionLink) {
+    return NextResponse.json({ error: linkError ?? "Failed to generate invite link" }, { status: 500 });
   }
+  await sendInviteEmail(invite.email, actionLink, { orgName: org?.name ?? "your workspace", role: invite.role });
 
   return NextResponse.json({ ok: true });
 }

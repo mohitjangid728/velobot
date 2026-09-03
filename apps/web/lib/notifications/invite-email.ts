@@ -1,34 +1,33 @@
 import "server-only";
 import { sendEmail } from "@/lib/notifications/email";
+import { renderEmailTemplate, escapeHtml } from "@/lib/notifications/email-template";
 
 /**
- * Supabase's inviteUserByEmail() is a "new user" mailer — it errors when the
- * address already belongs to a registered auth user, which is a completely
- * normal case (inviting a teammate who already has a VeloBot account in
- * another org). Message wording has shifted across supabase-js versions, so
- * this matches loosely rather than on one exact string/code.
+ * The only invite email VeloBot sends — see api/orgs/[orgId]/invites/route.ts,
+ * which now generates the Supabase auth link itself (via generateLink)
+ * rather than letting Supabase's own built-in mailer send it, specifically
+ * so every invite (new signup or existing account) goes out through this
+ * one branded template instead of a mix of our design and Supabase's
+ * default. `acceptUrl` is that Supabase-hosted verification link — clicking
+ * it establishes the session, then redirects into our own /accept-invite
+ * flow, so this function itself has no auth logic of its own.
  */
-export function isAlreadyRegisteredError(message: string | undefined): boolean {
-  if (!message) return false;
-  const m = message.toLowerCase();
-  return m.includes("already been registered") || m.includes("already registered") || m.includes("already exists");
-}
-
-/**
- * The one path (see api/orgs/[orgId]/invites/route.ts) where we send our own
- * branded email instead of Supabase Auth's built-in inviteUserByEmail() —
- * used only when the invitee already has a VeloBot account, since Supabase's
- * mailer refuses to send to an existing user. Kept in its own module (rather
- * than inlined at the one call site) so the resend route can reuse it
- * without duplicating the HTML.
- */
-export async function sendInviteEmail(to: string, acceptUrl: string, opts: { existingUser: boolean }): Promise<void> {
-  const subject = opts.existingUser ? "You've been invited to a VeloBot workspace" : "You're invited to VeloBot";
-  const html = `
-    <p>${opts.existingUser ? "You've been invited to join a workspace on VeloBot." : "You've been invited to VeloBot."}</p>
-    <p>You already have a VeloBot account, so just log in to accept:</p>
-    <p><a href="${acceptUrl}">${acceptUrl}</a></p>
-    <p>This link expires in 7 days.</p>
-  `;
-  await sendEmail(to, subject, html);
+export async function sendInviteEmail(
+  to: string,
+  acceptUrl: string,
+  opts: { orgName: string; role: "admin" | "agent" }
+): Promise<void> {
+  const roleLabel = opts.role === "admin" ? "an Admin" : "an Agent";
+  const orgName = escapeHtml(opts.orgName);
+  const html = renderEmailTemplate({
+    previewText: `You've been invited to join ${orgName} on VeloBot.`,
+    heading: `You've been invited to join ${orgName}`,
+    paragraphs: [
+      `You've been invited to join <strong>${orgName}</strong> on VeloBot as ${roleLabel}.`,
+      `VeloBot helps teams answer customers instantly with AI trained on their own content, and hand off to a human the moment it matters.`,
+    ],
+    cta: { text: "Accept invitation", url: acceptUrl },
+    footnote: "This invite link expires in 7 days. If you weren't expecting this, you can safely ignore this email.",
+  });
+  await sendEmail(to, `You've been invited to join ${opts.orgName} on VeloBot`, html);
 }

@@ -16,7 +16,7 @@ export async function sendEmail(to: string, subject: string, html: string) {
   }
   try {
     await client.emails.send({
-      from: process.env.RESEND_FROM_EMAIL ?? "support@velobot.example",
+      from: process.env.RESEND_FROM_EMAIL ?? "VeloBot <admin@techfen.com>",
       to,
       subject,
       html,

@@ -3,6 +3,7 @@ import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { notifySlack } from "@/lib/notifications/slack";
 import { notifyDiscord } from "@/lib/notifications/discord";
 import { sendEmail } from "@/lib/notifications/email";
+import { renderEmailTemplate, escapeHtml } from "@/lib/notifications/email-template";
 
 export const runtime = "nodejs";
 
@@ -59,10 +60,20 @@ export async function POST(req: Request) {
   }
 
   const tasks: Promise<unknown>[] = [notifySlack(text), notifyDiscord(text)];
-  for (const userId of recipientUserIds) {
-    const { data: userRes } = await admin.auth.admin.getUserById(userId);
-    if (userRes.user?.email) {
-      tasks.push(sendEmail(userRes.user.email, `Unassigned conversation waiting (${bot_name})`, `<p>${text}</p>`));
+  if (recipientUserIds.length > 0) {
+    const emailHtml = renderEmailTemplate({
+      previewText: `A ${bot_name} conversation has been waiting ${waited_seconds}s for an agent.`,
+      heading: "A conversation needs an agent",
+      paragraphs: [
+        `A <strong>${escapeHtml(bot_name)}</strong> conversation${visitor_email ? ` from <strong>${escapeHtml(visitor_email)}</strong>` : ""} has been waiting <strong>${waited_seconds}s</strong> for an agent.`,
+      ],
+      cta: { text: "Open inbox", url: inboxUrl },
+    });
+    for (const userId of recipientUserIds) {
+      const { data: userRes } = await admin.auth.admin.getUserById(userId);
+      if (userRes.user?.email) {
+        tasks.push(sendEmail(userRes.user.email, `Unassigned conversation waiting (${bot_name})`, emailHtml));
+      }
     }
   }
   await Promise.allSettled(tasks);

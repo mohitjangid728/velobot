@@ -5,7 +5,8 @@ import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { getCurrentUser, getRoleForOrg } from "@/lib/auth/session";
 import { assertCanInviteMember } from "@/lib/billing/guards";
-import { sendInviteEmail, isAlreadyRegisteredError } from "@/lib/notifications/invite-email";
+import { sendInviteEmail } from "@/lib/notifications/invite-email";
+import { generateInviteLink } from "@/lib/auth/generate-invite-link";
 
 const INVITE_TTL_MS = 7 * 24 * 60 * 60 * 1000;
 
@@ -57,24 +58,23 @@ export async function POST(req: NextRequest, { params }: { params: { orgId: stri
     return NextResponse.json({ error: inviteError?.message ?? "Failed to create invite" }, { status: 500 });
   }
 
+  const { data: org } = await admin.from("organizations").select("name").eq("id", params.orgId).single();
+
   const redirectTo = `${process.env.NEXT_PUBLIC_APP_URL}/accept-invite?token=${token}`;
-  const { error: mailError } = await admin.auth.admin.inviteUserByEmail(parsed.data.email, { redirectTo });
-  if (mailError) {
-    if (isAlreadyRegisteredError(mailError.message)) {
-      // The invitee already has a VeloBot account — Supabase's own mailer
-      // won't send to them, so fall back to our own transactional email
-      // (Resend) with the same accept-invite link. accept/route.ts already
-      // handles a logged-in existing user correctly (just checks the email
-      // matches and upserts membership), so this path was always reachable,
-      // just never triggered before now.
-      await sendInviteEmail(parsed.data.email, redirectTo, { existingUser: true });
-    } else {
-      // A genuine failure (bad email, provider outage) — roll back rather
-      // than leaving an orphaned, un-sendable invite.
-      await admin.from("invites").delete().eq("id", invite.id);
-      return NextResponse.json({ error: mailError.message }, { status: 500 });
-    }
+  // generateLink (rather than inviteUserByEmail) creates the auth user the
+  // same way but hands back the verification link instead of sending
+  // Supabase's own built-in email, so every invite goes out through our
+  // own branded Resend template rather than a mix of our design and
+  // Supabase's default. See generateInviteLink for why an existing user's
+  // email needs a magiclink fallback rather than plain "invite".
+  const { actionLink, error: linkError } = await generateInviteLink(admin, parsed.data.email, redirectTo);
+  if (linkError || !actionLink) {
+    // A genuine failure (bad email, provider outage) — roll back rather
+    // than leaving an orphaned, un-sendable invite.
+    await admin.from("invites").delete().eq("id", invite.id);
+    return NextResponse.json({ error: linkError ?? "Failed to generate invite link" }, { status: 500 });
   }
+  await sendInviteEmail(parsed.data.email, actionLink, { orgName: org?.name ?? "your workspace", role: parsed.data.role });
 
   return NextResponse.json({ invite });
 }
