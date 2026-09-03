@@ -115,12 +115,29 @@ export const ADDONS: { messages: AddonDefinition; seat: AddonDefinition } = {
   seat: { amount: 1, price: { USD: 10, INR: 499 }, recurring: true },
 };
 
-/** Yearly is priced at 10x monthly (2 months free) for every paid tier — used by the pricing UI's "2 months free" badge math. */
-export function yearlyMonthsFree(tier: Exclude<PlanTier, "free">, currency: Currency): number {
-  const plan = PLANS[tier];
-  if (!plan.pricing) return 0;
-  const monthly = plan.pricing.monthly[currency];
-  const yearly = plan.pricing.yearly[currency];
-  if (!monthly) return 0;
+/** Keyed `${tier}:${interval}:${currency}` — built by lib/billing/plan-pricing.ts's getPlanPriceOverrides() from the plan_price_overrides table. Passed around as plain data (not fetched here) so this file stays a pure, isomorphic module with no DB access. */
+export type PlanPriceOverrideMap = Record<string, number>;
+
+export function priceOverrideKey(tier: Exclude<PlanTier, "free">, interval: BillingInterval, currency: Currency): string {
+  return `${tier}:${interval}:${currency}`;
+}
+
+/** The price actually shown/charged: a Super-Admin-edited override if one exists for this (tier, interval, currency), else the static default above. Every pricing display should go through this rather than reading `PLANS[tier].pricing` directly, so an admin edit takes effect everywhere at once. */
+export function getEffectivePrice(
+  tier: Exclude<PlanTier, "free">,
+  interval: BillingInterval,
+  currency: Currency,
+  overrides?: PlanPriceOverrideMap
+): number | undefined {
+  const override = overrides?.[priceOverrideKey(tier, interval, currency)];
+  if (override !== undefined) return override;
+  return PLANS[tier].pricing?.[interval][currency];
+}
+
+/** Yearly is priced at 10x monthly (2 months free) for every paid tier by default — used by the pricing UI's "2 months free" badge math. Override-aware so an admin-edited price doesn't leave the badge showing a stale month count. */
+export function yearlyMonthsFree(tier: Exclude<PlanTier, "free">, currency: Currency, overrides?: PlanPriceOverrideMap): number {
+  const monthly = getEffectivePrice(tier, "monthly", currency, overrides);
+  const yearly = getEffectivePrice(tier, "yearly", currency, overrides);
+  if (!monthly || yearly === undefined) return 0;
   return Math.round((monthly * 12 - yearly) / monthly);
 }

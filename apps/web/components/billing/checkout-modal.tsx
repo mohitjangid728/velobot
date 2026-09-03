@@ -1,9 +1,12 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import Script from "next/script";
 import { useRouter } from "next/navigation";
-import { Dialog, DialogContent, DialogHeader, DialogBody, DialogTitle } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogBody, DialogTitle, DialogFooter } from "@/components/ui/dialog";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { trackEvent } from "@/lib/analytics/posthog";
 import type { CheckoutSessionInput } from "@velobot/shared";
 
@@ -28,11 +31,14 @@ declare global {
   }
 }
 
+type Phase = "review" | "processing";
+
 /**
  * Razorpay Checkout is a self-contained popup, not an embeddable iframe
- * like Stripe's — this component's own <Dialog> only covers the brief
- * "preparing checkout" / error states between clicking a plan and
- * Razorpay's own modal opening; the two are never shown stacked.
+ * like Stripe's — this component's own <Dialog> covers the "review your
+ * order / enter a coupon" step and the brief "preparing checkout" / error
+ * states between confirming and Razorpay's own modal opening; the two are
+ * never shown stacked.
  */
 export function CheckoutModal({
   open,
@@ -46,79 +52,91 @@ export function CheckoutModal({
   request: CheckoutSessionInput | null;
 }) {
   const router = useRouter();
+  const [phase, setPhase] = useState<Phase>("review");
+  const [couponCode, setCouponCode] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [scriptLoaded, setScriptLoaded] = useState(false);
-  const startedRef = useRef<string | null>(null);
 
   useEffect(() => {
-    if (!open || !request || !scriptLoaded) return;
-    // Guards against re-running for the same request if this effect
-    // re-fires (e.g. router.refresh() re-rendering the parent) before the
-    // dialog has actually been reopened for a new one.
-    const requestKey = JSON.stringify(request);
-    if (startedRef.current === requestKey) return;
-    startedRef.current = requestKey;
+    if (open) {
+      setPhase("review");
+      setCouponCode("");
+      setError(null);
+    }
+  }, [open]);
 
+  async function startCheckout() {
+    if (!request) return;
+    if (!scriptLoaded) {
+      setError("Payments script is still loading. Please try again in a moment.");
+      return;
+    }
+    setPhase("processing");
     setError(null);
-    (async () => {
-      const res = await fetch("/api/razorpay/checkout", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(request),
-      });
-      const body = await res.json();
-      if (!res.ok) {
-        setError(body.error ?? "Could not start checkout");
-        return;
-      }
-      if (!window.Razorpay) {
-        setError("Payments script failed to load. Please try again.");
-        return;
-      }
 
-      const razorpay = new window.Razorpay({
-        key: body.keyId,
-        subscription_id: body.subscriptionId,
-        order_id: body.orderId,
-        name: "VeloBot",
-        description: title,
-        theme: { color: "#4F46E5" },
-        handler: async (response) => {
-          await fetch("/api/razorpay/verify", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify(response),
-          });
-          trackEvent("checkout_completed", { kind: request.kind });
+    const body: CheckoutSessionInput = couponCode.trim()
+      ? ({ ...request, couponCode: couponCode.trim() } as CheckoutSessionInput)
+      : request;
+
+    const res = await fetch("/api/razorpay/checkout", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    });
+    const resBody = await res.json();
+    if (!res.ok) {
+      setError(resBody.error ?? "Could not start checkout");
+      setPhase("review");
+      return;
+    }
+    if (!window.Razorpay) {
+      setError("Payments script failed to load. Please try again.");
+      setPhase("review");
+      return;
+    }
+
+    const razorpay = new window.Razorpay({
+      key: resBody.keyId,
+      subscription_id: resBody.subscriptionId,
+      order_id: resBody.orderId,
+      name: "VeloBot",
+      description: title,
+      theme: { color: "#4F46E5" },
+      handler: async (response) => {
+        await fetch("/api/razorpay/verify", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(response),
+        });
+        trackEvent("checkout_completed", { kind: request.kind });
+        onOpenChange(false);
+        router.refresh();
+      },
+      modal: {
+        ondismiss: () => {
+          setPhase("review");
           onOpenChange(false);
-          router.refresh();
         },
-        modal: {
-          ondismiss: () => {
-            startedRef.current = null;
-            onOpenChange(false);
-          },
-        },
-      });
-      // Our own dialog only ever showed a loading/error state — close it
-      // now so Razorpay's modal is the only one visible.
-      onOpenChange(false);
-      razorpay.open();
-    })();
-  }, [open, request, scriptLoaded, title, onOpenChange, router]);
+      },
+    });
+    // Our own dialog only ever showed the review/loading/error states —
+    // close it now so Razorpay's modal is the only one visible.
+    onOpenChange(false);
+    razorpay.open();
+  }
 
   function handleClose(next: boolean) {
     onOpenChange(next);
     if (!next) {
       setError(null);
-      startedRef.current = null;
+      setPhase("review");
     }
   }
 
   return (
     <>
       <Script src="https://checkout.razorpay.com/v1/checkout.js" onLoad={() => setScriptLoaded(true)} />
-      <Dialog open={open && (!!error || !KEY_ID)} onOpenChange={handleClose}>
+      <Dialog open={open} onOpenChange={handleClose}>
         <DialogContent className="max-w-md">
           <DialogHeader>
             <DialogTitle>{title}</DialogTitle>
@@ -133,12 +151,30 @@ export function CheckoutModal({
                   <code className="rounded bg-muted px-1 py-0.5 text-xs">.env.example</code> to enable billing.
                 </p>
               </div>
-            ) : error ? (
-              <p className="py-8 text-center text-sm text-status-critical">{error}</p>
-            ) : (
+            ) : phase === "processing" ? (
               <p className="py-8 text-center text-sm text-muted-foreground">Preparing checkout...</p>
+            ) : (
+              <div className="flex flex-col gap-4 py-2">
+                {error && <p className="text-sm text-status-critical">{error}</p>}
+                <div className="flex flex-col gap-1.5">
+                  <Label htmlFor="coupon-code">Coupon code (optional)</Label>
+                  <Input
+                    id="coupon-code"
+                    placeholder="e.g. LAUNCH20"
+                    value={couponCode}
+                    onChange={(e) => setCouponCode(e.target.value.toUpperCase())}
+                  />
+                </div>
+              </div>
             )}
           </DialogBody>
+          {KEY_ID && phase === "review" && (
+            <DialogFooter>
+              <Button onClick={startCheckout} className="w-full">
+                Continue to payment
+              </Button>
+            </DialogFooter>
+          )}
         </DialogContent>
       </Dialog>
     </>

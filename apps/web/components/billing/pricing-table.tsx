@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { PLAN_TIERS, PAID_TIERS, yearlyMonthsFree, type PlanTier, type BillingInterval, type Currency } from "@velobot/shared";
+import { PLAN_TIERS, PAID_TIERS, yearlyMonthsFree, type PlanTier, type BillingInterval, type Currency, type PlanPriceOverrideMap } from "@velobot/shared";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { PlanCard } from "./plan-card";
@@ -15,6 +15,7 @@ export function PricingTable({
   currentTier,
   mode,
   onSelectPlan,
+  priceOverrides,
 }: {
   defaultCurrency?: Currency;
   /** Marks a tier's card as "Current plan" and disables its own CTA — omit on the logged-out public page. */
@@ -22,11 +23,13 @@ export function PricingTable({
   /** "link" sends CTAs to /signup (logged-out, public page). "checkout" invokes onSelectPlan (logged-in dashboard). */
   mode: "link" | "checkout";
   onSelectPlan?: (tier: Exclude<PlanTier, "free">, interval: BillingInterval, currency: Currency) => void;
+  /** Super-Admin-edited prices from admin/pricing — omit to use the static defaults in plans.ts. */
+  priceOverrides?: PlanPriceOverrideMap;
 }) {
   const [interval, setInterval] = useState<BillingInterval>("monthly");
   const [currency, setCurrency] = useState<Currency>(defaultCurrency);
 
-  const monthsFree = yearlyMonthsFree(HIGHLIGHTED_TIER, currency);
+  const monthsFree = yearlyMonthsFree(HIGHLIGHTED_TIER, currency, priceOverrides);
 
   return (
     <div className="flex flex-col gap-8">
@@ -116,6 +119,7 @@ export function PricingTable({
               isCurrent={isCurrent}
               highlighted={tier === HIGHLIGHTED_TIER}
               cta={cta}
+              priceOverrides={priceOverrides}
             />
           );
         })}

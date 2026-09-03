@@ -1,5 +1,5 @@
 import { Check } from "lucide-react";
-import { PLANS, type PlanTier, type BillingInterval, type Currency } from "@velobot/shared";
+import { PLANS, getEffectivePrice, type PlanTier, type BillingInterval, type Currency, type PlanPriceOverrideMap } from "@velobot/shared";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
@@ -13,6 +13,7 @@ export function PlanCard({
   isCurrent,
   highlighted,
   cta,
+  priceOverrides,
 }: {
   tier: PlanTier;
   interval: BillingInterval;
@@ -20,9 +21,11 @@ export function PlanCard({
   isCurrent: boolean;
   highlighted?: boolean;
   cta: React.ReactNode;
+  /** Super-Admin-edited prices from admin/pricing — omit to use the static defaults in plans.ts. */
+  priceOverrides?: PlanPriceOverrideMap;
 }) {
   const plan = PLANS[tier];
-  const price = plan.pricing?.[interval][currency];
+  const price = tier === "free" ? undefined : getEffectivePrice(tier, interval, currency, priceOverrides);
 
   return (
     <div

@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { format } from "date-fns";
 import { CheckCircle2, Sparkles } from "lucide-react";
-import { PLANS, type Organization, type PlanTier, type BillingInterval, type Currency } from "@velobot/shared";
+import { PLANS, type Organization, type PlanTier, type BillingInterval, type Currency, type PlanPriceOverrideMap } from "@velobot/shared";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -38,7 +38,15 @@ export function QuotaBar({ label, used, limit, extra }: { label: string; used: n
   );
 }
 
-export function BillingPanel({ org, usage }: { org: Organization; usage: UsageSummary }) {
+export function BillingPanel({
+  org,
+  usage,
+  priceOverrides,
+}: {
+  org: Organization;
+  usage: UsageSummary;
+  priceOverrides?: PlanPriceOverrideMap;
+}) {
   const [pricingOpen, setPricingOpen] = useState(false);
   const [checkoutRequest, setCheckoutRequest] = useState<CheckoutSessionInput | null>(null);
   const [addonOpen, setAddonOpen] = useState<"messages" | "seat" | null>(null);
@@ -140,7 +148,13 @@ export function BillingPanel({ org, usage }: { org: Organization; usage: UsageSu
             <DialogTitle>Choose a plan</DialogTitle>
           </DialogHeader>
           <DialogBody>
-            <PricingTable defaultCurrency={org.currency} currentTier={org.plan} mode="checkout" onSelectPlan={handleSelectPlan} />
+            <PricingTable
+              defaultCurrency={org.currency}
+              currentTier={org.plan}
+              mode="checkout"
+              onSelectPlan={handleSelectPlan}
+              priceOverrides={priceOverrides}
+            />
           </DialogBody>
         </DialogContent>
       </Dialog>

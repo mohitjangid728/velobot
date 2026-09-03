@@ -9,6 +9,21 @@ import {
   markPastDueBySubscription,
 } from "@/lib/razorpay/billing-mutations";
 import type { PlanTier, BillingInterval, Currency } from "@velobot/shared";
+import { recordRedemption } from "@/lib/billing/coupons";
+
+async function recordCouponIfPresent(
+  notes: Record<string, string | number>,
+  orgId: string,
+  purchaseKind: "messages_addon" | "plan_subscription"
+) {
+  if (!notes.couponId) return;
+  await recordRedemption({
+    couponId: String(notes.couponId),
+    orgId,
+    purchaseKind,
+    amountDiscounted: Number(notes.amountDiscounted ?? 0),
+  });
+}
 
 export const runtime = "nodejs";
 
@@ -74,8 +89,10 @@ export async function POST(req: Request) {
           currentStart: subscription.current_start,
           currentEnd: subscription.current_end,
         });
+        await recordCouponIfPresent(notes, orgId, "plan_subscription");
       } else if (notes.kind === "addon_seat") {
         await applyAddonSeatActivation(orgId, { subscriptionId: subscription.id, quantity: Number(notes.quantity ?? 1) });
+        await recordCouponIfPresent(notes, orgId, "plan_subscription");
       }
       break;
     }
@@ -109,6 +126,7 @@ export async function POST(req: Request) {
       // order — see app/api/razorpay/verify/route.ts's matching check.
       if (await alreadyProcessedEvent(`order_verify:${order.id}`)) break;
       await applyAddonMessagesCredit(orgId, { quantity: Number(notes.quantity ?? 1) });
+      await recordCouponIfPresent(notes, orgId, "messages_addon");
       break;
     }
 

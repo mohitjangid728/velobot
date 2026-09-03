@@ -1,9 +1,11 @@
 import { NextResponse } from "next/server";
-import { ROLE_RANK, CheckoutSessionSchema, ADDONS } from "@velobot/shared";
+import { ROLE_RANK, CheckoutSessionSchema, ADDONS, getEffectivePrice } from "@velobot/shared";
 import { getActiveOrg } from "@/lib/auth/session";
 import { getRazorpayClient, TOTAL_COUNT_BY_INTERVAL } from "@/lib/razorpay/client";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { getPlanId, getAddonSeatPlanId } from "@/lib/razorpay/plan-map";
+import { getPlanPriceOverrides } from "@/lib/billing/plan-pricing";
+import { validateCoupon } from "@/lib/billing/coupons";
 
 /**
  * Replaces stripe/checkout-session/route.ts. Returns a subscription/order
@@ -41,34 +43,71 @@ export async function POST(req: Request) {
     }
 
     if (parsed.data.kind === "plan") {
-      const { tier, interval, currency } = parsed.data;
+      const { tier, interval, currency, couponCode } = parsed.data;
       const planId = getPlanId(tier as Exclude<typeof tier, "free">, interval, currency);
+
+      let offerId: string | undefined;
+      const couponNotes: Record<string, string | number> = {};
+      if (couponCode) {
+        const overrides = await getPlanPriceOverrides();
+        const originalAmount = getEffectivePrice(tier, interval, currency, overrides) ?? 0;
+        const result = await validateCoupon(couponCode, "plan_subscription", org.id, originalAmount);
+        if (!result.ok) return NextResponse.json({ error: result.error }, { status: 400 });
+        offerId = result.validation.coupon.razorpay_offer_id ?? undefined;
+        couponNotes.couponId = result.validation.coupon.id;
+        couponNotes.couponCode = result.validation.coupon.code;
+        couponNotes.amountDiscounted = result.validation.amountDiscounted;
+      }
+
       const subscription = await razorpay.subscriptions.create({
         plan_id: planId,
         total_count: TOTAL_COUNT_BY_INTERVAL[interval],
         customer_notify: 1,
-        notes: { org_id: org.id, kind: "plan", tier, interval, currency },
+        ...(offerId ? { offer_id: offerId } : {}),
+        notes: { org_id: org.id, kind: "plan", tier, interval, currency, ...couponNotes },
       });
       return NextResponse.json({ subscriptionId: subscription.id, keyId });
     }
 
-    const { addon, currency, quantity } = parsed.data;
+    const { addon, currency, quantity, couponCode } = parsed.data;
     if (addon === "messages") {
+      let amount = ADDONS.messages.price[currency] * quantity;
+      const couponNotes: Record<string, string | number> = {};
+      if (couponCode) {
+        const result = await validateCoupon(couponCode, "messages_addon", org.id, amount);
+        if (!result.ok) return NextResponse.json({ error: result.error }, { status: 400 });
+        amount = result.validation.discountedAmount;
+        couponNotes.couponId = result.validation.coupon.id;
+        couponNotes.couponCode = result.validation.coupon.code;
+        couponNotes.amountDiscounted = result.validation.amountDiscounted;
+      }
       const order = await razorpay.orders.create({
-        amount: ADDONS.messages.price[currency] * quantity * 100,
+        amount: amount * 100,
         currency,
-        notes: { org_id: org.id, kind: "addon_messages", quantity },
+        notes: { org_id: org.id, kind: "addon_messages", quantity, ...couponNotes },
       });
       return NextResponse.json({ orderId: order.id, keyId });
     }
 
     const planId = getAddonSeatPlanId(currency);
+    let offerId: string | undefined;
+    const couponNotes: Record<string, string | number> = {};
+    if (couponCode) {
+      const originalAmount = ADDONS.seat.price[currency] * quantity;
+      const result = await validateCoupon(couponCode, "plan_subscription", org.id, originalAmount);
+      if (!result.ok) return NextResponse.json({ error: result.error }, { status: 400 });
+      offerId = result.validation.coupon.razorpay_offer_id ?? undefined;
+      couponNotes.couponId = result.validation.coupon.id;
+      couponNotes.couponCode = result.validation.coupon.code;
+      couponNotes.amountDiscounted = result.validation.amountDiscounted;
+    }
     const subscription = await razorpay.subscriptions.create({
       plan_id: planId,
       total_count: TOTAL_COUNT_BY_INTERVAL.monthly,
       quantity,
       customer_notify: 1,
-      notes: { org_id: org.id, kind: "addon_seat", quantity },
+      ...(offerId ? { offer_id: offerId } : {}),
+      notes: { org_id: org.id, kind: "addon_seat", quantity, ...couponNotes },
     });
     return NextResponse.json({ subscriptionId: subscription.id, keyId });
   } catch (err) {

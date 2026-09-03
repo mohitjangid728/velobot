@@ -18,6 +18,10 @@ const ACTION_LABEL: Record<AdminAuditAction, string> = {
   "org.note_add": "left a note",
   "admin.promote": "promoted a Super Admin",
   "admin.demote": "removed a Super Admin",
+  "plan.update_price": "updated plan pricing",
+  "legal.update_page": "edited a legal page",
+  "coupon.create": "created a coupon",
+  "coupon.revoke": "revoked a coupon",
 };
 
 function describeDetails(entry: AdminAuditLogWithActor): string | null {

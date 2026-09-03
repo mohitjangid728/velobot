@@ -12,6 +12,7 @@ export const CheckoutPlanSchema = z.object({
   tier: z.enum(["hobby", "growth", "business"]),
   interval: z.enum(["monthly", "yearly"]),
   currency: z.enum(["USD", "INR"]),
+  couponCode: z.string().min(1).max(40).optional(),
 });
 
 export const CheckoutAddonSchema = z.object({
@@ -19,6 +20,7 @@ export const CheckoutAddonSchema = z.object({
   addon: z.enum(["messages", "seat"]),
   currency: z.enum(["USD", "INR"]),
   quantity: z.number().int().min(1).max(20).default(1),
+  couponCode: z.string().min(1).max(40).optional(),
 });
 
 export const CheckoutSessionSchema = z.discriminatedUnion("kind", [CheckoutPlanSchema, CheckoutAddonSchema]);
@@ -311,6 +313,53 @@ export const CreateOrgNoteSchema = z.object({
   note: z.string().min(1).max(2000),
 });
 export type CreateOrgNoteInput = z.infer<typeof CreateOrgNoteSchema>;
+
+// ── Plan pricing overrides (admin/pricing) ────────────────────────────────
+export const UpdatePlanPriceSchema = z.object({
+  tier: z.enum(["hobby", "growth", "business"]),
+  interval: z.enum(["monthly", "yearly"]),
+  currency: z.enum(["USD", "INR"]),
+  amount: z.number().int().min(0).max(1_000_000),
+});
+export type UpdatePlanPriceInput = z.infer<typeof UpdatePlanPriceSchema>;
+
+// ── Legal pages (admin/legal) ──────────────────────────────────────────────
+export const UpdateLegalPageSchema = z.object({
+  title: z.string().min(1).max(200),
+  content_markdown: z.string().min(1).max(50_000),
+});
+export type UpdateLegalPageInput = z.infer<typeof UpdateLegalPageSchema>;
+
+// ── Coupons (admin/coupons) ────────────────────────────────────────────────
+// razorpay_offer_id's requirement for plan_subscription/all is enforced by
+// the .refine below rather than a discriminated union, since discount_type
+// and applies_to vary independently.
+export const CreateCouponSchema = z
+  .object({
+    code: z
+      .string()
+      .min(3)
+      .max(40)
+      .regex(/^[A-Z0-9_-]+$/, "Uppercase letters, numbers, hyphens, and underscores only"),
+    discount_type: z.enum(["percent", "fixed"]),
+    discount_value: z.number().positive(),
+    applies_to: z.enum(["messages_addon", "plan_subscription", "all"]),
+    // Required only when applies_to includes plan_subscription — Razorpay
+    // Offers can't be created via API (dashboard only), so the Super Admin
+    // creates the matching Offer there first and pastes its id here.
+    razorpay_offer_id: z.string().min(1).max(100).optional(),
+    max_redemptions: z.number().int().positive().optional(),
+    expires_at: z.string().datetime().optional(),
+  })
+  .refine((data) => data.discount_type !== "percent" || data.discount_value <= 100, {
+    message: "A percentage discount can't exceed 100",
+    path: ["discount_value"],
+  })
+  .refine((data) => data.applies_to === "messages_addon" || !!data.razorpay_offer_id, {
+    message: "A Razorpay offer ID is required for coupons that apply to plan subscriptions",
+    path: ["razorpay_offer_id"],
+  });
+export type CreateCouponInput = z.infer<typeof CreateCouponSchema>;
 
 // ── Conversation ratings (widget-facing) ──────────────────────────────
 export const SubmitRatingSchema = z.object({

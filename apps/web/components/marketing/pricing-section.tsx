@@ -1,7 +1,9 @@
 import { PricingTable } from "@/components/billing/pricing-table";
 import { ADDONS, type Currency } from "@velobot/shared";
+import { getPlanPriceOverrides } from "@/lib/billing/plan-pricing";
 
-export function PricingSection({ currency, id }: { currency: Currency; id?: string }) {
+export async function PricingSection({ currency, id }: { currency: Currency; id?: string }) {
+  const priceOverrides = await getPlanPriceOverrides();
   return (
     <section id={id} className="mx-auto flex max-w-6xl flex-col items-center gap-10 px-6 py-24">
       <div className="flex flex-col items-center gap-3 text-center">
@@ -16,7 +18,7 @@ export function PricingSection({ currency, id }: { currency: Currency; id?: stri
       </div>
 
       <div className="w-full">
-        <PricingTable defaultCurrency={currency} mode="link" />
+        <PricingTable defaultCurrency={currency} mode="link" priceOverrides={priceOverrides} />
       </div>
 
       <div className="w-full max-w-2xl rounded-xl border bg-card p-6 text-center">

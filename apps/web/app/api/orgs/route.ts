@@ -3,6 +3,7 @@ import { CreateOrgSchema } from "@velobot/shared";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { ACTIVE_ORG_COOKIE, getCurrentUser } from "@/lib/auth/session";
+import { isPlatformAdmin } from "@/lib/auth/platform-admin";
 
 function slugify(name: string) {
   return (
@@ -17,6 +18,13 @@ function slugify(name: string) {
 export async function POST(req: NextRequest) {
   const user = await getCurrentUser();
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+
+  if (await isPlatformAdmin(user.id)) {
+    return NextResponse.json(
+      { error: "Super Admins manage all workspaces from the admin panel — they can't create their own." },
+      { status: 403 }
+    );
+  }
 
   const parsed = CreateOrgSchema.safeParse(await req.json());
   if (!parsed.success) {

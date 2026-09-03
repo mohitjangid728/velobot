@@ -7,6 +7,22 @@ import { getActiveOrg } from "@/lib/auth/session";
 import { getRazorpayClient } from "@/lib/razorpay/client";
 import { applyPlanActivation, applyAddonSeatActivation, applyAddonMessagesCredit } from "@/lib/razorpay/billing-mutations";
 import { alreadyProcessedEvent } from "@/lib/razorpay/webhook-idempotency";
+import { recordRedemption } from "@/lib/billing/coupons";
+
+/** Reads the couponId/amountDiscounted this checkout route stamped into notes (if a coupon was used) and records the redemption — a no-op if notes.couponId is absent. */
+async function recordCouponIfPresent(
+  notes: Record<string, unknown>,
+  orgId: string,
+  purchaseKind: "messages_addon" | "plan_subscription"
+) {
+  if (!notes.couponId) return;
+  await recordRedemption({
+    couponId: String(notes.couponId),
+    orgId,
+    purchaseKind,
+    amountDiscounted: Number(notes.amountDiscounted ?? 0),
+  });
+}
 
 const VerifyOrderSchema = z.object({
   razorpay_payment_id: z.string(),
@@ -69,6 +85,7 @@ export async function POST(req: Request) {
       }
       if (notes.kind === "addon_messages") {
         await applyAddonMessagesCredit(org.id, { quantity: Number(notes.quantity ?? 1) });
+        await recordCouponIfPresent(notes, org.id, "messages_addon");
       }
       return NextResponse.json({ ok: true });
     }
@@ -98,8 +115,10 @@ export async function POST(req: Request) {
         currentStart: subscription.current_start,
         currentEnd: subscription.current_end,
       });
+      await recordCouponIfPresent(notes, org.id, "plan_subscription");
     } else if (notes.kind === "addon_seat") {
       await applyAddonSeatActivation(org.id, { subscriptionId: subscription.id, quantity: Number(notes.quantity ?? 1) });
+      await recordCouponIfPresent(notes, org.id, "plan_subscription");
     }
     return NextResponse.json({ ok: true });
   } catch (err) {

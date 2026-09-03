@@ -1,15 +1,17 @@
 import Link from "next/link";
 import { requirePlatformAdmin } from "@/lib/auth/platform-admin";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
-import { PLANS, PAID_TIERS, type Organization, type Currency } from "@velobot/shared";
+import { PLANS, PAID_TIERS, getEffectivePrice, type Organization, type Currency, type PlanPriceOverrideMap } from "@velobot/shared";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { getPlanPriceOverrides } from "@/lib/billing/plan-pricing";
 
-/** Normalizes a paid org's subscription to a monthly figure in its own currency — never summed across currencies. */
-function monthlyRevenue(org: Organization): number {
-  const plan = PLANS[org.plan];
-  if (!plan.pricing) return 0;
-  return org.billing_interval === "yearly" ? plan.pricing.yearly[org.currency] / 12 : plan.pricing.monthly[org.currency];
+/** Normalizes a paid org's subscription to a monthly figure in its own currency — never summed across currencies. Uses any Super-Admin-edited price override, falling back to the static default. */
+function monthlyRevenue(org: Organization, overrides: PlanPriceOverrideMap): number {
+  if (org.plan === "free") return 0;
+  const price = getEffectivePrice(org.plan, org.billing_interval, org.currency, overrides);
+  if (price === undefined) return 0;
+  return org.billing_interval === "yearly" ? price / 12 : price;
 }
 
 function formatMoney(amount: number, currency: Currency): string {
@@ -23,18 +25,19 @@ export default async function AdminBillingPage() {
 
   const { data: orgs } = await admin.from("organizations").select("*");
   const list = (orgs ?? []) as Organization[];
+  const priceOverrides = await getPlanPriceOverrides();
 
   const payingOrgs = list.filter((o) => o.plan !== "free");
   const pastDue = list.filter((o) => o.payment_status === "past_due");
   const withAddons = list.filter((o) => o.addon_message_balance > 0 || o.addon_seats > 0);
 
   const mrrByCurrency: Record<Currency, number> = { USD: 0, INR: 0 };
-  for (const org of payingOrgs) mrrByCurrency[org.currency] += monthlyRevenue(org);
+  for (const org of payingOrgs) mrrByCurrency[org.currency] += monthlyRevenue(org, priceOverrides);
 
   const byPlan = PAID_TIERS.map((tier) => {
     const onTier = payingOrgs.filter((o) => o.plan === tier);
     const revenue: Record<Currency, number> = { USD: 0, INR: 0 };
-    for (const org of onTier) revenue[org.currency] += monthlyRevenue(org);
+    for (const org of onTier) revenue[org.currency] += monthlyRevenue(org, priceOverrides);
     return { tier, count: onTier.length, revenue };
   });
 

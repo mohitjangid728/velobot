@@ -82,7 +82,11 @@ export type AdminAuditAction =
   | "org.impersonate"
   | "org.note_add"
   | "admin.promote"
-  | "admin.demote";
+  | "admin.demote"
+  | "plan.update_price"
+  | "legal.update_page"
+  | "coupon.create"
+  | "coupon.revoke";
 
 /** A free-text support/CRM note a Super Admin leaves on an org — e.g. "VIP customer", "disputing invoice #123". Append-only, never edited or deleted. */
 export interface AdminOrgNote {
@@ -101,6 +105,59 @@ export interface AdminAuditLog {
   target_org_id: string | null;
   details: Record<string, unknown>;
   created_at: string;
+}
+
+/** A Super-Admin-edited price that overrides the static default in ../plans.ts for one (tier, interval, currency). Absence of a row means "use the static default." */
+export interface PlanPriceOverride {
+  id: string;
+  tier: Exclude<PlanTier, "free">;
+  interval: BillingInterval;
+  currency: Currency;
+  amount: number;
+  /** Filled in once a matching Razorpay Plan is created to charge this amount — null until then (see lib/billing/plan-pricing.ts). */
+  razorpay_plan_id: string | null;
+  updated_by: string;
+  updated_at: string;
+}
+
+export type LegalPageSlug = "terms" | "privacy" | "subprocessors";
+
+/** Database-backed content for the public /legal/* pages, editable via admin/legal. */
+export interface LegalPage {
+  slug: LegalPageSlug;
+  title: string;
+  content_markdown: string;
+  updated_by: string | null;
+  updated_at: string;
+}
+
+export type CouponDiscountType = "percent" | "fixed";
+export type CouponAppliesTo = "messages_addon" | "plan_subscription" | "all";
+
+export interface Coupon {
+  id: string;
+  code: string;
+  discount_type: CouponDiscountType;
+  discount_value: number;
+  applies_to: CouponAppliesTo;
+  /** Required (admin-provided) only when applies_to includes plan_subscription — Razorpay Offers can't be created via API, only referenced by an id created manually in their dashboard. */
+  razorpay_offer_id: string | null;
+  max_redemptions: number | null;
+  times_redeemed: number;
+  expires_at: string | null;
+  is_active: boolean;
+  created_by: string;
+  created_at: string;
+}
+
+/** One redemption per (coupon, org) — enforced by a unique index, not just application code. */
+export interface CouponRedemption {
+  id: string;
+  coupon_id: string;
+  org_id: string;
+  purchase_kind: Extract<CouponAppliesTo, "messages_addon" | "plan_subscription">;
+  amount_discounted: number;
+  redeemed_at: string;
 }
 
 export interface Queue {

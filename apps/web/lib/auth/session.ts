@@ -72,6 +72,13 @@ export async function requireActiveOrg() {
     }
     redirect("/onboarding");
   }
+  // Super Admins only ever use dashboard routes via impersonation (see
+  // getActiveOrg above) — a real membership of their own isn't a supported
+  // path, so route them to the admin panel instead of leaking normal org
+  // access onto the platform-admin account.
+  if (!ctx.impersonating && (await isPlatformAdmin(ctx.user.id))) {
+    redirect("/admin");
+  }
   if (ctx.org.suspended_at) redirect("/suspended");
   return ctx as {
     user: NonNullable<typeof ctx.user>;

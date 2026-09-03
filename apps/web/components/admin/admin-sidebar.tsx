@@ -3,7 +3,7 @@
 import { useState } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { Activity, Building2, CreditCard, History, LogOut, Search, Users } from "lucide-react";
+import { Activity, Building2, CreditCard, FileText, History, LogOut, Search, Tag, Users } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { createSupabaseBrowserClient } from "@/lib/supabase/client";
 import { Input } from "@/components/ui/input";
@@ -11,6 +11,9 @@ import { Input } from "@/components/ui/input";
 const ADMIN_NAV = [
   { href: "/admin", label: "Organizations", icon: Building2, exact: true },
   { href: "/admin/billing", label: "Billing", icon: CreditCard },
+  { href: "/admin/pricing", label: "Pricing", icon: CreditCard },
+  { href: "/admin/legal", label: "Legal pages", icon: FileText },
+  { href: "/admin/coupons", label: "Coupons", icon: Tag },
   { href: "/admin/health", label: "System health", icon: Activity },
   { href: "/admin/admins", label: "Super Admins", icon: Users },
   { href: "/admin/activity", label: "Activity", icon: History },
