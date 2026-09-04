@@ -52,6 +52,7 @@ export function CheckoutModal({
 }) {
   const router = useRouter();
   const [error, setError] = useState<string | null>(null);
+  const [freeActivationDone, setFreeActivationDone] = useState(false);
   const [scriptLoaded, setScriptLoaded] = useState(() => typeof window !== "undefined" && !!window.Razorpay);
   const startedForRequest = useRef<CheckoutSessionInput | null>(null);
 
@@ -84,6 +85,16 @@ export function CheckoutModal({
     const resBody = await res.json();
     if (!res.ok) {
       setError(resBody.error ?? "Could not start checkout");
+      return;
+    }
+    // A coupon covered the entire amount — nothing for Razorpay to charge,
+    // so the server already activated it directly (see activateFreeOfCharge
+    // in checkout/route.ts). No popup to open here.
+    if (resBody.freeActivation) {
+      trackEvent("checkout_completed", { kind: current.kind });
+      setFreeActivationDone(true);
+      router.refresh();
+      setTimeout(() => onOpenChange(false), 1500);
       return;
     }
     if (!window.Razorpay) {
@@ -130,6 +141,7 @@ export function CheckoutModal({
   useEffect(() => {
     if (!open) {
       setError(null);
+      setFreeActivationDone(false);
       startedForRequest.current = null;
     }
   }, [open]);
@@ -151,6 +163,10 @@ export function CheckoutModal({
                   <code className="rounded bg-muted px-1 py-0.5 text-xs">.env.example</code> to enable billing.
                 </p>
               </div>
+            ) : freeActivationDone ? (
+              <p className="py-8 text-center text-sm text-status-good">
+                Your coupon covered the full amount — no payment needed. You&apos;re all set!
+              </p>
             ) : error ? (
               <p className="py-8 text-center text-sm text-status-critical">{error}</p>
             ) : (

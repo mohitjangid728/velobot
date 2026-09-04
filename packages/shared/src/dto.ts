@@ -363,12 +363,20 @@ export const CreateCouponSchema = z
     discount_type: z.enum(["percent", "fixed"]),
     discount_value: z.number().positive(),
     applies_to: z.enum(["messages_addon", "plan_subscription", "all"]),
+    // Required only for "fixed" — "$10 off" isn't "₹10 off", so a flat
+    // discount needs to know which currency it's denominated in.
+    // "percent" ignores this entirely (10% off is 10% off in any currency).
+    currency: z.enum(["USD", "INR"]).optional(),
     max_redemptions: z.number().int().positive().optional(),
     expires_at: z.string().datetime().optional(),
   })
   .refine((data) => data.discount_type !== "percent" || data.discount_value <= 100, {
     message: "A percentage discount can't exceed 100",
     path: ["discount_value"],
+  })
+  .refine((data) => data.discount_type !== "fixed" || !!data.currency, {
+    message: "A currency is required for a fixed-amount discount",
+    path: ["currency"],
   });
 export type CreateCouponInput = z.infer<typeof CreateCouponSchema>;
 

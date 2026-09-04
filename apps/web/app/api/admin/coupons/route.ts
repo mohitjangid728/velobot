@@ -29,6 +29,7 @@ export async function POST(req: NextRequest) {
       discount_type: parsed.data.discount_type,
       discount_value: parsed.data.discount_value,
       applies_to: parsed.data.applies_to,
+      currency: parsed.data.currency ?? null,
       max_redemptions: parsed.data.max_redemptions ?? null,
       expires_at: parsed.data.expires_at ?? null,
       created_by: admin.id,

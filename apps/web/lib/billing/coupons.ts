@@ -1,6 +1,6 @@
 import "server-only";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
-import type { Coupon, CouponAppliesTo } from "@velobot/shared";
+import type { Coupon, CouponAppliesTo, Currency } from "@velobot/shared";
 
 export type PurchaseKind = Extract<CouponAppliesTo, "messages_addon" | "plan_subscription">;
 
@@ -9,6 +9,8 @@ export interface CouponValidation {
   /** Whole-currency-unit amount actually charged after the discount (never below 0). */
   discountedAmount: number;
   amountDiscounted: number;
+  /** True when the discount covers the full amount — callers should skip Razorpay entirely (its Orders API requires a positive amount) and activate directly instead. */
+  isFullyDiscounted: boolean;
 }
 
 /**
@@ -23,7 +25,8 @@ export async function validateCoupon(
   code: string,
   purchaseKind: PurchaseKind,
   orgId: string,
-  originalAmount: number
+  originalAmount: number,
+  currency: Currency
 ): Promise<{ ok: true; validation: CouponValidation } | { ok: false; error: string }> {
   const admin = createSupabaseAdminClient();
   const { data: coupon } = await admin
@@ -43,6 +46,11 @@ export async function validateCoupon(
   if (c.applies_to !== "all" && c.applies_to !== purchaseKind) {
     return { ok: false, error: "This coupon doesn't apply to this purchase" };
   }
+  // Only "fixed" coupons care about currency — "$10 off" isn't "₹10 off",
+  // but a percentage discount works the same in any currency.
+  if (c.discount_type === "fixed" && c.currency !== currency) {
+    return { ok: false, error: `This coupon only applies to ${c.currency} purchases` };
+  }
 
   const { data: existingRedemption } = await admin
     .from("coupon_redemptions")
@@ -56,7 +64,15 @@ export async function validateCoupon(
     c.discount_type === "percent" ? Math.round((originalAmount * c.discount_value) / 100) : Math.round(c.discount_value);
   const discountedAmount = Math.max(0, originalAmount - amountDiscounted);
 
-  return { ok: true, validation: { coupon: c, discountedAmount, amountDiscounted: originalAmount - discountedAmount } };
+  return {
+    ok: true,
+    validation: {
+      coupon: c,
+      discountedAmount,
+      amountDiscounted: originalAmount - discountedAmount,
+      isFullyDiscounted: discountedAmount === 0,
+    },
+  };
 }
 
 /** Called from the verify/webhook success path once, guarded by the same idempotency table those routes already use — never called twice for the same payment. */

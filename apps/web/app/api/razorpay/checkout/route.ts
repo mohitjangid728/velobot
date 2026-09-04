@@ -4,7 +4,42 @@ import { getActiveOrg } from "@/lib/auth/session";
 import { getRazorpayClient } from "@/lib/razorpay/client";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { getPlanPriceOverrides } from "@/lib/billing/plan-pricing";
-import { validateCoupon } from "@/lib/billing/coupons";
+import { validateCoupon, recordRedemption, type CouponValidation } from "@/lib/billing/coupons";
+import { applyPlanActivation, applyAddonSeatActivation, applyAddonMessagesCredit } from "@/lib/razorpay/billing-mutations";
+import type { BillingInterval, Currency, PlanTier } from "@velobot/shared";
+
+/** A 100%-off coupon leaves nothing for Razorpay to charge (its Orders API requires a positive amount) — activate directly and skip Razorpay entirely rather than sending it a zero/negative amount. */
+async function activateFreeOfCharge(
+  orgId: string,
+  purchase:
+    | { kind: "plan"; tier: Exclude<PlanTier, "free">; interval: BillingInterval; currency: Currency }
+    | { kind: "addon_messages"; quantity: number }
+    | { kind: "addon_seat"; quantity: number },
+  coupon: CouponValidation
+): Promise<void> {
+  const reference = `coupon_${coupon.coupon.id}_${Date.now()}`;
+  if (purchase.kind === "plan") {
+    const now = Math.floor(Date.now() / 1000);
+    await applyPlanActivation(orgId, {
+      tier: purchase.tier,
+      interval: purchase.interval,
+      currency: purchase.currency,
+      subscriptionId: reference,
+      currentStart: now,
+      currentEnd: now + (purchase.interval === "yearly" ? 365 : 30) * 24 * 60 * 60,
+    });
+  } else if (purchase.kind === "addon_seat") {
+    await applyAddonSeatActivation(orgId, { subscriptionId: reference, quantity: purchase.quantity });
+  } else {
+    await applyAddonMessagesCredit(orgId, { quantity: purchase.quantity });
+  }
+  await recordRedemption({
+    couponId: coupon.coupon.id,
+    orgId,
+    purchaseKind: purchase.kind === "addon_messages" ? "messages_addon" : "plan_subscription",
+    amountDiscounted: coupon.amountDiscounted,
+  });
+}
 
 /**
  * Replaces stripe/checkout-session/route.ts. Every kind — plan, seat
@@ -63,13 +98,20 @@ export async function POST(req: Request) {
       }
 
       const couponNotes: Record<string, string | number> = {};
+      let coupon: CouponValidation | null = null;
       if (couponCode) {
-        const result = await validateCoupon(couponCode, "plan_subscription", org.id, amount);
+        const result = await validateCoupon(couponCode, "plan_subscription", org.id, amount, currency);
         if (!result.ok) return NextResponse.json({ error: result.error }, { status: 400 });
-        amount = result.validation.discountedAmount;
-        couponNotes.couponId = result.validation.coupon.id;
-        couponNotes.couponCode = result.validation.coupon.code;
-        couponNotes.amountDiscounted = result.validation.amountDiscounted;
+        coupon = result.validation;
+        amount = coupon.discountedAmount;
+        couponNotes.couponId = coupon.coupon.id;
+        couponNotes.couponCode = coupon.coupon.code;
+        couponNotes.amountDiscounted = coupon.amountDiscounted;
+      }
+
+      if (coupon?.isFullyDiscounted) {
+        await activateFreeOfCharge(org.id, { kind: "plan", tier, interval, currency }, coupon);
+        return NextResponse.json({ freeActivation: true });
       }
 
       const order = await razorpay.orders.create({
@@ -84,13 +126,19 @@ export async function POST(req: Request) {
     if (addon === "messages") {
       let amount = ADDONS.messages.price[currency] * quantity;
       const couponNotes: Record<string, string | number> = {};
+      let coupon: CouponValidation | null = null;
       if (couponCode) {
-        const result = await validateCoupon(couponCode, "messages_addon", org.id, amount);
+        const result = await validateCoupon(couponCode, "messages_addon", org.id, amount, currency);
         if (!result.ok) return NextResponse.json({ error: result.error }, { status: 400 });
-        amount = result.validation.discountedAmount;
-        couponNotes.couponId = result.validation.coupon.id;
-        couponNotes.couponCode = result.validation.coupon.code;
-        couponNotes.amountDiscounted = result.validation.amountDiscounted;
+        coupon = result.validation;
+        amount = coupon.discountedAmount;
+        couponNotes.couponId = coupon.coupon.id;
+        couponNotes.couponCode = coupon.coupon.code;
+        couponNotes.amountDiscounted = coupon.amountDiscounted;
+      }
+      if (coupon?.isFullyDiscounted) {
+        await activateFreeOfCharge(org.id, { kind: "addon_messages", quantity }, coupon);
+        return NextResponse.json({ freeActivation: true });
       }
       const order = await razorpay.orders.create({
         amount: amount * 100,
@@ -102,13 +150,19 @@ export async function POST(req: Request) {
 
     let seatAmount = ADDONS.seat.price[currency] * quantity;
     const couponNotes: Record<string, string | number> = {};
+    let seatCoupon: CouponValidation | null = null;
     if (couponCode) {
-      const result = await validateCoupon(couponCode, "plan_subscription", org.id, seatAmount);
+      const result = await validateCoupon(couponCode, "plan_subscription", org.id, seatAmount, currency);
       if (!result.ok) return NextResponse.json({ error: result.error }, { status: 400 });
-      seatAmount = result.validation.discountedAmount;
-      couponNotes.couponId = result.validation.coupon.id;
-      couponNotes.couponCode = result.validation.coupon.code;
-      couponNotes.amountDiscounted = result.validation.amountDiscounted;
+      seatCoupon = result.validation;
+      seatAmount = seatCoupon.discountedAmount;
+      couponNotes.couponId = seatCoupon.coupon.id;
+      couponNotes.couponCode = seatCoupon.coupon.code;
+      couponNotes.amountDiscounted = seatCoupon.amountDiscounted;
+    }
+    if (seatCoupon?.isFullyDiscounted) {
+      await activateFreeOfCharge(org.id, { kind: "addon_seat", quantity }, seatCoupon);
+      return NextResponse.json({ freeActivation: true });
     }
     const order = await razorpay.orders.create({
       amount: Math.round(seatAmount * 100),

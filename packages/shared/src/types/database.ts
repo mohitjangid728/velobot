@@ -158,8 +158,10 @@ export interface Coupon {
   discount_type: CouponDiscountType;
   discount_value: number;
   applies_to: CouponAppliesTo;
-  /** Required (admin-provided) only when applies_to includes plan_subscription — Razorpay Offers can't be created via API, only referenced by an id created manually in their dashboard. */
+  /** Unused — plan/seat purchases are plain Razorpay Orders, not Subscriptions, so no Offer object is ever involved. Kept only so existing rows don't need a migration to drop the column. */
   razorpay_offer_id: string | null;
+  /** Required only for discount_type "fixed" — "$10 off" and "₹10 off" are different discounts, so a flat-amount coupon only applies to purchases in this currency. Irrelevant (and left null) for "percent", which works the same in any currency. */
+  currency: Currency | null;
   max_redemptions: number | null;
   times_redeemed: number;
   expires_at: string | null;

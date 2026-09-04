@@ -9,7 +9,7 @@ import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogBody, DialogTitle, DialogFooter } from "@/components/ui/dialog";
-import type { Coupon, CouponAppliesTo, CouponDiscountType } from "@velobot/shared";
+import type { Coupon, CouponAppliesTo, CouponDiscountType, Currency } from "@velobot/shared";
 
 const APPLIES_TO_LABEL: Record<CouponAppliesTo, string> = {
   messages_addon: "Messages add-on",
@@ -25,6 +25,7 @@ export function CouponsManager({ initialCoupons, canManage }: { initialCoupons: 
   const [discountType, setDiscountType] = useState<CouponDiscountType>("percent");
   const [discountValue, setDiscountValue] = useState("10");
   const [appliesTo, setAppliesTo] = useState<CouponAppliesTo>("messages_addon");
+  const [currency, setCurrency] = useState<Currency>("USD");
   const [maxRedemptions, setMaxRedemptions] = useState("");
   const [expiresAt, setExpiresAt] = useState("");
   const [creating, setCreating] = useState(false);
@@ -42,6 +43,7 @@ export function CouponsManager({ initialCoupons, canManage }: { initialCoupons: 
         discount_type: discountType,
         discount_value: Number(discountValue),
         applies_to: appliesTo,
+        currency: discountType === "fixed" ? currency : undefined,
         max_redemptions: maxRedemptions ? Number(maxRedemptions) : undefined,
         expires_at: expiresAt ? new Date(expiresAt).toISOString() : undefined,
       }),
@@ -91,7 +93,7 @@ export function CouponsManager({ initialCoupons, canManage }: { initialCoupons: 
                   <Badge variant={c.is_active ? "default" : "outline"}>{c.is_active ? "Active" : "Revoked"}</Badge>
                 </div>
                 <p className="text-xs text-muted-foreground">
-                  {c.discount_type === "percent" ? `${c.discount_value}% off` : `${c.discount_value} off`} ·{" "}
+                  {c.discount_type === "percent" ? `${c.discount_value}% off` : `${c.currency ?? ""} ${c.discount_value} off`} ·{" "}
                   {APPLIES_TO_LABEL[c.applies_to]} · {c.times_redeemed}
                   {c.max_redemptions ? `/${c.max_redemptions}` : ""} redeemed
                   {c.expires_at && ` · expires ${new Date(c.expires_at).toLocaleDateString()}`}
@@ -150,7 +152,27 @@ export function CouponsManager({ initialCoupons, canManage }: { initialCoupons: 
                     onChange={(e) => setDiscountValue(e.target.value)}
                   />
                 </div>
+                {discountType === "fixed" && (
+                  <div className="flex flex-1 flex-col gap-1.5">
+                    <Label>Currency</Label>
+                    <Select value={currency} onValueChange={(v) => setCurrency(v as Currency)}>
+                      <SelectTrigger>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="USD">USD</SelectItem>
+                        <SelectItem value="INR">INR</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                )}
               </div>
+              {discountType === "fixed" && (
+                <p className="-mt-2 text-xs text-muted-foreground">
+                  A fixed amount only applies to purchases in this currency — &quot;$10 off&quot; isn&apos;t &quot;₹10
+                  off&quot;.
+                </p>
+              )}
               <div className="flex flex-col gap-1.5">
                 <Label>Applies to</Label>
                 <Select value={appliesTo} onValueChange={(v) => setAppliesTo(v as CouponAppliesTo)}>
