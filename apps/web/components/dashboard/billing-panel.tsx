@@ -1,6 +1,7 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 import { format } from "date-fns";
 import { CheckCircle2, Sparkles } from "lucide-react";
 import { getEffectivePlan, type Organization, type PlanTier, type BillingInterval, type Currency, type PlanPriceOverrideMap, type PlanOverrideMap } from "@velobot/shared";
@@ -43,14 +44,42 @@ export function BillingPanel({
   usage,
   priceOverrides,
   planOverrides,
+  initialCheckoutRequest,
 }: {
   org: Organization;
   usage: UsageSummary;
   priceOverrides?: PlanPriceOverrideMap;
   planOverrides?: PlanOverrideMap;
+  /** Carried from the pricing page via signup/onboarding's query string — opens Checkout immediately instead of landing on Free. */
+  initialCheckoutRequest?: CheckoutSessionInput | null;
 }) {
+  const router = useRouter();
   const [pricingOpen, setPricingOpen] = useState(false);
-  const [checkoutRequest, setCheckoutRequest] = useState<CheckoutSessionInput | null>(null);
+  const [checkoutRequest, setCheckoutRequest] = useState<CheckoutSessionInput | null>(initialCheckoutRequest ?? null);
+
+  useEffect(() => {
+    // Razorpay's Payment Link callback_url (see checkout/route.ts) lands
+    // the browser back here with these query params after payment — verify
+    // + activate immediately rather than waiting on the webhook, which is
+    // still the authoritative fallback if this call never fires.
+    const params = new URLSearchParams(window.location.search);
+    const paymentLinkId = params.get("razorpay_payment_link_id");
+    if (!paymentLinkId) return;
+    const body = {
+      razorpay_payment_id: params.get("razorpay_payment_id"),
+      razorpay_payment_link_id: paymentLinkId,
+      razorpay_payment_link_reference_id: params.get("razorpay_payment_link_reference_id") ?? "",
+      razorpay_payment_link_status: params.get("razorpay_payment_link_status"),
+      razorpay_signature: params.get("razorpay_signature"),
+    };
+    window.history.replaceState(null, "", window.location.pathname);
+    fetch("/api/razorpay/verify", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    }).then(() => router.refresh());
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
   const [addonOpen, setAddonOpen] = useState<"messages" | "seat" | null>(null);
 
   const plan = getEffectivePlan(org.plan, planOverrides);

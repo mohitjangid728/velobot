@@ -98,7 +98,7 @@ export function PricingTable({
           } else if (mode === "link") {
             cta = (
               <Button asChild className="w-full" variant={tier === HIGHLIGHTED_TIER ? "default" : "outline"}>
-                <Link href={`/signup?plan=${tier}&interval=${interval}`}>Get started</Link>
+                <Link href={`/signup?plan=${tier}&interval=${interval}&currency=${currency}`}>Get started</Link>
               </Button>
             );
           } else {

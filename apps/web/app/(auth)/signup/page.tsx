@@ -1,7 +1,7 @@
 "use client";
 
-import { useState } from "react";
-import { useRouter } from "next/navigation";
+import { Suspense, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { createSupabaseBrowserClient } from "@/lib/supabase/client";
 import { trackEvent } from "@/lib/analytics/posthog";
@@ -11,7 +11,25 @@ import { Label } from "@/components/ui/label";
 import { AuthShell } from "@/components/auth/auth-shell";
 
 export default function SignupPage() {
+  return (
+    <Suspense>
+      <SignupForm />
+    </Suspense>
+  );
+}
+
+function SignupForm() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  // Carried through from the pricing page's "Get started" link so the plan
+  // picked there survives signup and reaches billing as a preselected
+  // checkout — see onboarding-form.tsx and dashboard/settings/billing.
+  const plan = searchParams.get("plan");
+  const interval = searchParams.get("interval");
+  const currency = searchParams.get("currency");
+  const onboardingHref = plan
+    ? `/onboarding?plan=${plan}&interval=${interval ?? "monthly"}&currency=${currency ?? "USD"}`
+    : "/onboarding";
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [agreed, setAgreed] = useState(false);
@@ -31,7 +49,7 @@ export default function SignupPage() {
     const { data, error } = await supabase.auth.signUp({
       email,
       password,
-      options: { emailRedirectTo: `${window.location.origin}/onboarding` },
+      options: { emailRedirectTo: `${window.location.origin}${onboardingHref}` },
     });
     setLoading(false);
     if (error) {
@@ -40,7 +58,7 @@ export default function SignupPage() {
     }
     if (data.session) {
       trackEvent("signup_completed");
-      router.push("/onboarding");
+      router.push(onboardingHref);
       router.refresh();
     } else {
       setNotice("Check your email to confirm your account, then sign in.");

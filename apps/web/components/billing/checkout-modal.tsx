@@ -55,7 +55,7 @@ export function CheckoutModal({
   const [phase, setPhase] = useState<Phase>("review");
   const [couponCode, setCouponCode] = useState("");
   const [error, setError] = useState<string | null>(null);
-  const [scriptLoaded, setScriptLoaded] = useState(false);
+  const [scriptLoaded, setScriptLoaded] = useState(() => typeof window !== "undefined" && !!window.Razorpay);
 
   useEffect(() => {
     if (open) {
@@ -64,6 +64,24 @@ export function CheckoutModal({
       setError(null);
     }
   }, [open]);
+
+  useEffect(() => {
+    // Two CheckoutModal instances can exist at once (the always-mounted
+    // "Upgrade plan" one in BillingPanel, and one nested inside AddonModal
+    // that only mounts on open) — next/script dedupes by src and only
+    // fires onLoad for whichever instance actually triggered the load, so
+    // a later instance's own onLoad may never fire even though the script
+    // is already sitting on window. Poll for it instead of trusting onLoad
+    // alone.
+    if (scriptLoaded) return;
+    const id = setInterval(() => {
+      if (window.Razorpay) {
+        setScriptLoaded(true);
+        clearInterval(id);
+      }
+    }, 100);
+    return () => clearInterval(id);
+  }, [scriptLoaded]);
 
   async function startCheckout() {
     if (!request) return;
@@ -87,6 +105,15 @@ export function CheckoutModal({
     if (!res.ok) {
       setError(resBody.error ?? "Could not start checkout");
       setPhase("review");
+      return;
+    }
+    // Plan/seat purchases return a hosted Payment Link instead of an
+    // order/subscription id — no Checkout.js popup involved, just send the
+    // browser there. The callback_url set on the link (see checkout/route.ts)
+    // brings it back to this same billing page afterward.
+    if (resBody.paymentLinkUrl) {
+      trackEvent("checkout_redirect", { kind: request.kind });
+      window.location.href = resBody.paymentLinkUrl;
       return;
     }
     if (!window.Razorpay) {

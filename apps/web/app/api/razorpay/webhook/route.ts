@@ -41,14 +41,24 @@ interface RazorpayPaymentEntity {
   id: string;
   subscription_id?: string | null;
 }
+interface RazorpayPaymentLinkEntity {
+  id: string;
+  notes?: Record<string, string | number>;
+}
 interface RazorpayWebhookBody {
   event: string;
   payload: {
     subscription?: { entity: RazorpaySubscriptionEntity };
     order?: { entity: RazorpayOrderEntity };
     payment?: { entity: RazorpayPaymentEntity };
+    payment_link?: { entity: RazorpayPaymentLinkEntity };
   };
 }
+
+const PERIOD_SECONDS_BY_INTERVAL: Record<BillingInterval, number> = {
+  monthly: 30 * 24 * 60 * 60,
+  yearly: 365 * 24 * 60 * 60,
+};
 
 /** Replaces stripe/webhook/route.ts. Same responsibilities: verify signature, dedupe, mutate `organizations`. */
 export async function POST(req: Request) {
@@ -71,8 +81,42 @@ export async function POST(req: Request) {
   const subscription = body.payload.subscription?.entity;
   const order = body.payload.order?.entity;
   const payment = body.payload.payment?.entity;
+  const paymentLink = body.payload.payment_link?.entity;
 
   switch (body.event) {
+    // Plan/seat purchases go out as Payment Links, not Subscriptions (see
+    // checkout/route.ts's doc comment) — this is the authoritative,
+    // Razorpay-driven confirmation; app/api/razorpay/verify/route.ts
+    // applies the same activation immediately when the browser returns
+    // from the callback_url, for fast UX when the webhook is delayed.
+    // Payment Links have no ongoing subscription to renew or cancel, so
+    // unlike the subscription.* cases below there's no cancelled/halted
+    // counterpart here — see applyPlanActivation's doc comment for what
+    // that means for renewal.
+    case "payment_link.paid": {
+      if (!paymentLink) break;
+      const notes = paymentLink.notes ?? {};
+      const orgId = notes.org_id ? String(notes.org_id) : null;
+      if (!orgId) break;
+
+      if (notes.kind === "plan") {
+        const interval = notes.interval as BillingInterval;
+        const now = Math.floor(Date.now() / 1000);
+        await applyPlanActivation(orgId, {
+          tier: notes.tier as Exclude<PlanTier, "free">,
+          interval,
+          currency: notes.currency as Currency,
+          subscriptionId: paymentLink.id,
+          currentStart: now,
+          currentEnd: now + PERIOD_SECONDS_BY_INTERVAL[interval],
+        });
+        await recordCouponIfPresent(notes, orgId, "plan_subscription");
+      } else if (notes.kind === "addon_seat") {
+        await applyAddonSeatActivation(orgId, { subscriptionId: paymentLink.id, quantity: Number(notes.quantity ?? 1) });
+        await recordCouponIfPresent(notes, orgId, "plan_subscription");
+      }
+      break;
+    }
     case "subscription.activated":
     case "subscription.charged": {
       if (!subscription) break;
