@@ -37,6 +37,7 @@ function org(overrides: Partial<Organization>): Organization {
     seats_limit: 1,
     suspended_at: null,
     created_at: new Date().toISOString(),
+    expiry_reminder_sent_at: null,
     ...overrides,
   };
 }

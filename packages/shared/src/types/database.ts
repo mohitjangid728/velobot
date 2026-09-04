@@ -57,6 +57,8 @@ export interface Organization {
   /** Set by a platform Super Admin to block all widget traffic and dashboard access for this org. */
   suspended_at: string | null;
   created_at: string;
+  /** Stamped by app/api/internal/notify-plan-expiring so the daily reminder sends at most once per billing period — see that route's doc comment. */
+  expiry_reminder_sent_at: string | null;
 }
 
 /** "full" can mutate anything (plans, suspension, deletion, promoting other admins); "support" is view-only plus notes. */

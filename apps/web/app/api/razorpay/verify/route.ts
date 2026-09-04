@@ -5,9 +5,10 @@ import type { PlanTier, BillingInterval, Currency } from "@velobot/shared";
 import { validatePaymentVerification } from "razorpay/dist/utils/razorpay-utils";
 import { getActiveOrg } from "@/lib/auth/session";
 import { getRazorpayClient } from "@/lib/razorpay/client";
-import { applyPlanActivation, applyAddonSeatActivation, applyAddonMessagesCredit } from "@/lib/razorpay/billing-mutations";
+import { applyPlanActivation, applyAddonSeatActivation, applyAddonMessagesCredit, purchaseLineItem } from "@/lib/razorpay/billing-mutations";
 import { alreadyProcessedEvent } from "@/lib/razorpay/webhook-idempotency";
 import { recordRedemption } from "@/lib/billing/coupons";
+import { sendInvoiceEmail } from "@/lib/notifications/invoice-email";
 
 /** Reads the couponId/amountDiscounted this checkout route stamped into notes (if a coupon was used) and records the redemption — a no-op if notes.couponId is absent. */
 async function recordCouponIfPresent(
@@ -47,7 +48,7 @@ const VerifySubscriptionSchema = z.object({
  * bought. See lib/razorpay/billing-mutations.ts's doc comment.
  */
 export async function POST(req: Request) {
-  const { org, role } = await getActiveOrg();
+  const { org, role, user } = await getActiveOrg();
   if (!org || !role) return NextResponse.json({ error: "No active workspace" }, { status: 400 });
   if (ROLE_RANK[role] < ROLE_RANK.admin) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
@@ -104,6 +105,16 @@ export async function POST(req: Request) {
       } else if (notes.kind === "addon_seat") {
         await applyAddonSeatActivation(org.id, { subscriptionId: razorpay_order_id, quantity: Number(notes.quantity ?? 1) });
         await recordCouponIfPresent(notes, org.id, "plan_subscription");
+      }
+      if (user?.email) {
+        await sendInvoiceEmail(user.email, {
+          orgName: org.name,
+          lineItem: purchaseLineItem(notes),
+          amount: Number(order.amount) / 100,
+          currency: (notes.currency as Currency) ?? "USD",
+          orderId: razorpay_order_id,
+          date: new Date(),
+        });
       }
       return NextResponse.json({ ok: true });
     }

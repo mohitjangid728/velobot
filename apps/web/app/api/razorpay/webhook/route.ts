@@ -7,9 +7,29 @@ import {
   resetOrgToFree,
   clearAddonSeats,
   markPastDueBySubscription,
+  purchaseLineItem,
 } from "@/lib/razorpay/billing-mutations";
 import type { PlanTier, BillingInterval, Currency } from "@velobot/shared";
 import { recordRedemption } from "@/lib/billing/coupons";
+import { sendInvoiceEmail } from "@/lib/notifications/invoice-email";
+import { createSupabaseAdminClient } from "@/lib/supabase/admin";
+
+/** No authenticated user in a webhook — stands in as the purchase's recipient, same as the offline-capture notification's "primary contact" concept. */
+async function getPrimaryAdminEmail(orgId: string): Promise<string | null> {
+  const admin = createSupabaseAdminClient();
+  const { data: primaryAdmin } = await admin
+    .from("org_members")
+    .select("user_id")
+    .eq("org_id", orgId)
+    .eq("role", "admin")
+    .eq("status", "active")
+    .order("created_at", { ascending: true })
+    .limit(1)
+    .maybeSingle();
+  if (!primaryAdmin?.user_id) return null;
+  const { data: userRes } = await admin.auth.admin.getUserById(primaryAdmin.user_id);
+  return userRes.user?.email ?? null;
+}
 
 async function recordCouponIfPresent(
   notes: Record<string, string | number>,
@@ -35,6 +55,7 @@ interface RazorpaySubscriptionEntity {
 }
 interface RazorpayOrderEntity {
   id: string;
+  amount: number | string;
   notes?: Record<string, string | number>;
 }
 interface RazorpayPaymentEntity {
@@ -160,6 +181,22 @@ export async function POST(req: Request) {
       } else if (notes.kind === "addon_seat") {
         await applyAddonSeatActivation(orgId, { subscriptionId: order.id, quantity: Number(notes.quantity ?? 1) });
         await recordCouponIfPresent(notes, orgId, "plan_subscription");
+      }
+
+      const admin = createSupabaseAdminClient();
+      const [{ data: orgRow }, adminEmail] = await Promise.all([
+        admin.from("organizations").select("name").eq("id", orgId).single(),
+        getPrimaryAdminEmail(orgId),
+      ]);
+      if (adminEmail && orgRow) {
+        await sendInvoiceEmail(adminEmail, {
+          orgName: orgRow.name,
+          lineItem: purchaseLineItem(notes),
+          amount: Number(order.amount) / 100,
+          currency: (notes.currency as Currency) ?? "USD",
+          orderId: order.id,
+          date: new Date(),
+        });
       }
       break;
     }

@@ -60,6 +60,8 @@ export function renderEmailTemplate(opts: {
   heading: string;
   /** Pre-escaped paragraph HTML — each string becomes its own <p>. Keep copy plain; this isn't a general-purpose rich-text renderer. */
   paragraphs: string[];
+  /** Raw block-level HTML (e.g. a receipt table) rendered as-is between the paragraphs and the CTA — never wrapped in a <p>, unlike paragraphs above. */
+  bodyHtml?: string;
   cta?: { text: string; url: string };
   /** Small print under the button — e.g. "This link expires in 7 days." */
   footnote?: string;
@@ -98,6 +100,7 @@ export function renderEmailTemplate(opts: {
                 ${opts.paragraphs.map((p) => `<p style="margin:12px 0;">${p}</p>`).join("")}
               </td>
             </tr>
+            ${opts.bodyHtml ? `<tr><td style="padding:0 40px;">${opts.bodyHtml}</td></tr>` : ""}
             ${
               opts.cta
                 ? `<tr><td style="padding:4px 40px 0 40px;">${ctaButtonHtml(opts.cta.text, opts.cta.url)}</td></tr>`

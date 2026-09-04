@@ -1,8 +1,22 @@
 import "server-only";
-import { ADDONS, getEffectivePlan } from "@velobot/shared";
+import { ADDONS, PLANS, getEffectivePlan } from "@velobot/shared";
 import type { BillingInterval, Currency, PlanTier } from "@velobot/shared";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { getPlanOverride } from "@/lib/billing/plan-overrides";
+
+/** Human-readable description of a purchase for the invoice email — shared by verify/route.ts and webhook/route.ts, both of which read the same `notes` shape off an order. */
+export function purchaseLineItem(notes: Record<string, unknown>): string {
+  if (notes.kind === "plan") {
+    const tier = notes.tier as Exclude<PlanTier, "free">;
+    return `${PLANS[tier]?.name ?? tier} plan (${notes.interval})`;
+  }
+  if (notes.kind === "addon_seat") {
+    const quantity = Number(notes.quantity ?? 1);
+    return `Extra agent seat${quantity > 1 ? `s x${quantity}` : ""}`;
+  }
+  const quantity = Number(notes.quantity ?? 1);
+  return `Extra AI messages (+${(ADDONS.messages.amount * quantity).toLocaleString()})`;
+}
 
 /**
  * The single place both app/api/razorpay/verify/route.ts (client-driven,

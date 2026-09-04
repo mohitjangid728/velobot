@@ -10,9 +10,15 @@ import { AuthShell } from "@/components/auth/auth-shell";
 
 /**
  * Landed on via the Supabase admin-invite magic link (see
- * app/api/orgs/[orgId]/invites/route.ts). The browser client picks up the
- * session from the URL hash automatically; this page just needs the user
- * to set a password, then it links them to the org via the invite token.
+ * app/api/orgs/[orgId]/invites/route.ts), whose redirect carries the
+ * session as a URL hash fragment (#access_token=...&refresh_token=...).
+ * This app's browser client is configured for flowType: "pkce" (see
+ * lib/supabase/client.ts, via @supabase/ssr's default), so its built-in
+ * detectSessionInUrl only watches for a PKCE `?code=` param and never
+ * picks up a hash fragment automatically — this reads it manually and
+ * calls setSession() itself rather than trusting auto-detection to fire.
+ * Once a session exists, this page just needs the user to set a password,
+ * then it links them to the org via the invite token.
  */
 export default function AcceptInvitePage() {
   return (
@@ -32,6 +38,18 @@ function AcceptInviteForm() {
 
   useEffect(() => {
     const supabase = createSupabaseBrowserClient();
+    const hash = window.location.hash.startsWith("#") ? window.location.hash.slice(1) : window.location.hash;
+    const params = new URLSearchParams(hash);
+    const access_token = params.get("access_token");
+    const refresh_token = params.get("refresh_token");
+
+    if (access_token && refresh_token) {
+      supabase.auth.setSession({ access_token, refresh_token }).then(({ data }) => {
+        window.history.replaceState(null, "", window.location.pathname + window.location.search);
+        setReady(!!data.session);
+      });
+      return;
+    }
     supabase.auth.getSession().then(({ data }) => setReady(!!data.session));
   }, []);
 
