@@ -59,15 +59,15 @@ describe("validateCoupon", () => {
   });
 
   it("rejects a purchase kind the coupon doesn't apply to", async () => {
-    setupClient({ ...BASE_COUPON, applies_to: "plan_subscription", razorpay_offer_id: "offer_x" });
+    setupClient({ ...BASE_COUPON, applies_to: "plan_subscription" });
     const result = await validateCoupon("LAUNCH20", "messages_addon", "org-1", 100);
     expect(result.ok).toBe(false);
   });
 
-  it("rejects a plan_subscription coupon with no razorpay_offer_id", async () => {
+  it("accepts a plan_subscription coupon with no razorpay_offer_id — plan/seat purchases are plain Orders, not Subscriptions, so no Razorpay Offer is ever involved", async () => {
     setupClient({ ...BASE_COUPON, applies_to: "plan_subscription", razorpay_offer_id: null });
     const result = await validateCoupon("LAUNCH20", "plan_subscription", "org-1", 100);
-    expect(result.ok).toBe(false);
+    expect(result.ok).toBe(true);
   });
 
   it("rejects an org that already redeemed this coupon", async () => {

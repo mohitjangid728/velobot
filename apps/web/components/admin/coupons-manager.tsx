@@ -25,13 +25,10 @@ export function CouponsManager({ initialCoupons, canManage }: { initialCoupons: 
   const [discountType, setDiscountType] = useState<CouponDiscountType>("percent");
   const [discountValue, setDiscountValue] = useState("10");
   const [appliesTo, setAppliesTo] = useState<CouponAppliesTo>("messages_addon");
-  const [offerId, setOfferId] = useState("");
   const [maxRedemptions, setMaxRedemptions] = useState("");
   const [expiresAt, setExpiresAt] = useState("");
   const [creating, setCreating] = useState(false);
   const [error, setError] = useState<string | null>(null);
-
-  const needsOfferId = appliesTo !== "messages_addon";
 
   async function create(e: React.FormEvent) {
     e.preventDefault();
@@ -45,7 +42,6 @@ export function CouponsManager({ initialCoupons, canManage }: { initialCoupons: 
         discount_type: discountType,
         discount_value: Number(discountValue),
         applies_to: appliesTo,
-        razorpay_offer_id: needsOfferId ? offerId || undefined : undefined,
         max_redemptions: maxRedemptions ? Number(maxRedemptions) : undefined,
         expires_at: expiresAt ? new Date(expiresAt).toISOString() : undefined,
       }),
@@ -60,7 +56,6 @@ export function CouponsManager({ initialCoupons, canManage }: { initialCoupons: 
     setDialogOpen(false);
     setCode("");
     setDiscountValue("10");
-    setOfferId("");
     setMaxRedemptions("");
     setExpiresAt("");
   }
@@ -169,22 +164,6 @@ export function CouponsManager({ initialCoupons, canManage }: { initialCoupons: 
                   </SelectContent>
                 </Select>
               </div>
-              {needsOfferId && (
-                <div className="flex flex-col gap-1.5">
-                  <Label htmlFor="coupon-offer">Razorpay offer ID</Label>
-                  <Input
-                    id="coupon-offer"
-                    placeholder="offer_..."
-                    required
-                    value={offerId}
-                    onChange={(e) => setOfferId(e.target.value)}
-                  />
-                  <p className="text-xs text-muted-foreground">
-                    Razorpay Offers can only be created in their Dashboard, not via API. Create a matching Offer there
-                    for the plan(s) this coupon should discount, then paste its ID here.
-                  </p>
-                </div>
-              )}
               <div className="flex gap-3">
                 <div className="flex flex-1 flex-col gap-1.5">
                   <Label htmlFor="coupon-max">Max redemptions (optional)</Label>

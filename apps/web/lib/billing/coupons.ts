@@ -43,11 +43,6 @@ export async function validateCoupon(
   if (c.applies_to !== "all" && c.applies_to !== purchaseKind) {
     return { ok: false, error: "This coupon doesn't apply to this purchase" };
   }
-  if (purchaseKind === "plan_subscription" && !c.razorpay_offer_id) {
-    // Shouldn't happen if CreateCouponSchema's refine was enforced at
-    // creation time, but a coupon row could predate that constraint.
-    return { ok: false, error: "This coupon isn't configured for subscription purchases" };
-  }
 
   const { data: existingRedemption } = await admin
     .from("coupon_redemptions")

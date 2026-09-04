@@ -348,9 +348,11 @@ export const UpdateLegalPageSchema = z.object({
 export type UpdateLegalPageInput = z.infer<typeof UpdateLegalPageSchema>;
 
 // ── Coupons (admin/coupons) ────────────────────────────────────────────────
-// razorpay_offer_id's requirement for plan_subscription/all is enforced by
-// the .refine below rather than a discriminated union, since discount_type
-// and applies_to vary independently.
+// Plan/seat-addon purchases are plain Razorpay Orders, not Subscriptions
+// (see apps/web/app/api/razorpay/checkout/route.ts's doc comment), so a
+// coupon discount is just subtracted from the order amount before it's
+// created — same mechanism for every applies_to value, no Razorpay Offer
+// object involved at all.
 export const CreateCouponSchema = z
   .object({
     code: z
@@ -361,20 +363,12 @@ export const CreateCouponSchema = z
     discount_type: z.enum(["percent", "fixed"]),
     discount_value: z.number().positive(),
     applies_to: z.enum(["messages_addon", "plan_subscription", "all"]),
-    // Required only when applies_to includes plan_subscription — Razorpay
-    // Offers can't be created via API (dashboard only), so the Super Admin
-    // creates the matching Offer there first and pastes its id here.
-    razorpay_offer_id: z.string().min(1).max(100).optional(),
     max_redemptions: z.number().int().positive().optional(),
     expires_at: z.string().datetime().optional(),
   })
   .refine((data) => data.discount_type !== "percent" || data.discount_value <= 100, {
     message: "A percentage discount can't exceed 100",
     path: ["discount_value"],
-  })
-  .refine((data) => data.applies_to === "messages_addon" || !!data.razorpay_offer_id, {
-    message: "A Razorpay offer ID is required for coupons that apply to plan subscriptions",
-    path: ["razorpay_offer_id"],
   });
 export type CreateCouponInput = z.infer<typeof CreateCouponSchema>;
 

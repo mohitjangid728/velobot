@@ -29,7 +29,6 @@ export async function POST(req: NextRequest) {
       discount_type: parsed.data.discount_type,
       discount_value: parsed.data.discount_value,
       applies_to: parsed.data.applies_to,
-      razorpay_offer_id: parsed.data.razorpay_offer_id ?? null,
       max_redemptions: parsed.data.max_redemptions ?? null,
       expires_at: parsed.data.expires_at ?? null,
       created_by: admin.id,
