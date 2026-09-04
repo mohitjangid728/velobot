@@ -12,8 +12,7 @@ export function LegalPageShell({ title, updatedAt, children }: { title: string; 
             <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
             <p>
               <strong>Draft — pending legal review.</strong> This page is a complete first draft written to match what VeloBot
-              actually does, with a few placeholders (marked in brackets) that need your company&apos;s real details. Have a
-              lawyer review it before relying on it.
+              actually does. Have a lawyer review it before relying on it.
             </p>
           </div>
           <h1 className="text-3xl font-bold tracking-tight">{title}</h1>
