@@ -5,6 +5,7 @@ import { OrgSwitcher } from "@/components/dashboard/org-switcher";
 import { DashboardNav } from "@/components/dashboard/sidebar";
 import { ImpersonationBanner } from "@/components/dashboard/impersonation-banner";
 import { PastDueBanner } from "@/components/dashboard/past-due-banner";
+import { UpgradeBanner } from "@/components/dashboard/upgrade-banner";
 
 export default async function DashboardLayout({ children }: { children: React.ReactNode }) {
   const { org, role, memberships, user, impersonating } = await requireActiveOrg();
@@ -20,6 +21,7 @@ export default async function DashboardLayout({ children }: { children: React.Re
     <div className="fixed inset-0 flex flex-col overflow-hidden">
       {impersonating && <ImpersonationBanner orgName={org.name} />}
       {org.payment_status === "past_due" && <PastDueBanner />}
+      {org.plan === "free" && org.payment_status !== "past_due" && <UpgradeBanner />}
       <div className="flex flex-1 overflow-hidden">
         <aside className="flex w-64 shrink-0 flex-col overflow-hidden border-r bg-card">
           <div className="flex shrink-0 flex-col gap-4 p-5">
