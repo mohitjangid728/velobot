@@ -7,16 +7,17 @@ import { getPlanPriceOverrides } from "@/lib/billing/plan-pricing";
 import { validateCoupon } from "@/lib/billing/coupons";
 
 /**
- * Replaces stripe/checkout-session/route.ts. Plan and seat-addon purchases
- * go out as Razorpay Payment Links (a hosted page we redirect the browser
- * to) rather than Subscriptions — Subscriptions require a separate
- * "Subscriptions" activation on the Razorpay account that isn't available
- * here, while Payment Links work with the same basic Payments capability
- * as Orders. This means these are one-time charges, not auto-renewing:
- * see applyPlanActivation's caller in webhook/route.ts for how the paid
- * period's end date is computed, and its doc comment for what this does
- * and doesn't do about renewal. The messages add-on already used a plain
- * Order (no Plans/Subscriptions needed) and is unchanged.
+ * Replaces stripe/checkout-session/route.ts. Every kind — plan, seat
+ * add-on, messages add-on — goes out as a plain Razorpay Order opened via
+ * the embedded Checkout.js popup, not a Subscription: Subscriptions
+ * require a separate "Subscriptions" activation on the Razorpay account
+ * that isn't available here, while Orders work with the same basic
+ * Payments capability the account already has. This means plan/seat
+ * purchases are one-time charges, not auto-renewing — see
+ * applyPlanActivation's doc comment in billing-mutations.ts for what that
+ * does and doesn't mean for renewal (in short: nothing renews
+ * automatically; a fresh Order per billing period, created by our own app
+ * logic rather than Razorpay, is the intended future path for that).
  */
 export async function POST(req: Request) {
   const { org, role, user } = await getActiveOrg();
@@ -53,8 +54,6 @@ export async function POST(req: Request) {
       await admin.from("organizations").update({ razorpay_customer_id: customerId }).eq("id", org.id);
     }
 
-    const callbackUrl = `${process.env.NEXT_PUBLIC_APP_URL}/dashboard/settings/billing`;
-
     if (parsed.data.kind === "plan") {
       const { tier, interval, currency, couponCode } = parsed.data;
       const overrides = await getPlanPriceOverrides();
@@ -73,17 +72,12 @@ export async function POST(req: Request) {
         couponNotes.amountDiscounted = result.validation.amountDiscounted;
       }
 
-      const paymentLink = await razorpay.paymentLink.create({
+      const order = await razorpay.orders.create({
         amount: Math.round(amount * 100),
         currency,
-        description: `VeloBot ${tier} plan (${interval})`,
-        customer: { name: org.name, email: user.email ?? "" },
-        notify: { email: true, sms: false },
-        callback_url: callbackUrl,
-        callback_method: "get",
         notes: { org_id: org.id, kind: "plan", tier, interval, currency, ...couponNotes },
       });
-      return NextResponse.json({ paymentLinkUrl: paymentLink.short_url });
+      return NextResponse.json({ orderId: order.id, keyId });
     }
 
     const { addon, currency, quantity, couponCode } = parsed.data;
@@ -116,19 +110,14 @@ export async function POST(req: Request) {
       couponNotes.couponCode = result.validation.coupon.code;
       couponNotes.amountDiscounted = result.validation.amountDiscounted;
     }
-    const paymentLink = await razorpay.paymentLink.create({
+    const order = await razorpay.orders.create({
       amount: Math.round(seatAmount * 100),
       currency,
-      description: `VeloBot extra agent seat x${quantity}`,
-      customer: { name: org.name, email: user.email ?? "" },
-      notify: { email: true, sms: false },
-      callback_url: callbackUrl,
-      callback_method: "get",
       notes: { org_id: org.id, kind: "addon_seat", quantity, ...couponNotes },
     });
-    return NextResponse.json({ paymentLinkUrl: paymentLink.short_url });
+    return NextResponse.json({ orderId: order.id, keyId });
   } catch (err) {
-    console.error("[razorpay/checkout] Failed to create order/payment link", err);
+    console.error("[razorpay/checkout] Failed to create order", err);
     return NextResponse.json({ error: err instanceof Error ? err.message : "Failed to start checkout" }, { status: 500 });
   }
 }

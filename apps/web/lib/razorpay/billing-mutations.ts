@@ -23,11 +23,11 @@ function periodFields(currentStart: number | null | undefined, currentEnd: numbe
 }
 
 /**
- * Plan and seat-addon purchases go out as one-time Razorpay Payment Links,
- * not auto-renewing Subscriptions (see checkout/route.ts's doc comment for
+ * Plan and seat-addon purchases go out as one-time Razorpay Orders, not
+ * auto-renewing Subscriptions (see checkout/route.ts's doc comment for
  * why) — so `subscriptionId` here is really "whatever Razorpay entity id
- * this activation came from" (a payment link id in practice today), kept
- * under its original name to avoid a column rename, and `currentStart`/
+ * this activation came from" (an order id in practice today), kept under
+ * its original name to avoid a column rename, and `currentStart`/
  * `currentEnd` are computed locally (now → now + 30/365 days) rather than
  * read from Razorpay, which has no concept of a period for a one-time
  * payment. There is deliberately no automatic renewal or downgrade when

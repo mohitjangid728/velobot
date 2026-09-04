@@ -34,13 +34,6 @@ const VerifySubscriptionSchema = z.object({
   razorpay_subscription_id: z.string(),
   razorpay_signature: z.string(),
 });
-const VerifyPaymentLinkSchema = z.object({
-  razorpay_payment_id: z.string(),
-  razorpay_payment_link_id: z.string(),
-  razorpay_payment_link_reference_id: z.string().optional().default(""),
-  razorpay_payment_link_status: z.string(),
-  razorpay_signature: z.string(),
-});
 
 /**
  * Client-driven confirmation path — Razorpay Checkout's success handler
@@ -63,8 +56,7 @@ export async function POST(req: Request) {
 
   const orderAttempt = VerifyOrderSchema.safeParse(body);
   const subscriptionAttempt = VerifySubscriptionSchema.safeParse(body);
-  const paymentLinkAttempt = VerifyPaymentLinkSchema.safeParse(body);
-  if (!orderAttempt.success && !subscriptionAttempt.success && !paymentLinkAttempt.success) {
+  if (!orderAttempt.success && !subscriptionAttempt.success) {
     return NextResponse.json({ error: "Invalid verification payload" }, { status: 400 });
   }
 
@@ -84,63 +76,33 @@ export async function POST(req: Request) {
       const notes = order.notes ?? {};
       if (String(notes.org_id) !== org.id) return NextResponse.json({ error: "Order does not belong to this workspace" }, { status: 403 });
 
-      // Guard against the webhook (order.paid) already having credited
-      // this same order — this route and the webhook race, and
+      // Guard against the webhook (order.paid) already having applied this
+      // same order — this route and the webhook race, and
       // applyAddonMessagesCredit is additive, so double-firing would
-      // double-credit without this check.
+      // double-credit without this check (applyPlanActivation/
+      // applyAddonSeatActivation are plain overwrites and wouldn't
+      // double-apply either way, but the guard is shared across all three
+      // kinds for one order rather than split apart).
       if (await alreadyProcessedEvent(`order_verify:${razorpay_order_id}`)) {
         return NextResponse.json({ ok: true, deduped: true });
       }
       if (notes.kind === "addon_messages") {
         await applyAddonMessagesCredit(org.id, { quantity: Number(notes.quantity ?? 1) });
         await recordCouponIfPresent(notes, org.id, "messages_addon");
-      }
-      return NextResponse.json({ ok: true });
-    }
-
-    if (paymentLinkAttempt.success) {
-      const {
-        razorpay_payment_id,
-        razorpay_payment_link_id,
-        razorpay_payment_link_reference_id,
-        razorpay_payment_link_status,
-        razorpay_signature,
-      } = paymentLinkAttempt.data;
-      const valid = validatePaymentVerification(
-        {
-          payment_link_id: razorpay_payment_link_id,
-          payment_link_reference_id: razorpay_payment_link_reference_id,
-          payment_link_status: razorpay_payment_link_status,
-          payment_id: razorpay_payment_id,
-        },
-        razorpay_signature,
-        secret
-      );
-      if (!valid) return NextResponse.json({ error: "Invalid signature" }, { status: 400 });
-      if (razorpay_payment_link_status !== "paid") return NextResponse.json({ error: "Payment not completed" }, { status: 400 });
-
-      const paymentLink = await razorpay.paymentLink.fetch(razorpay_payment_link_id);
-      const notes = paymentLink.notes ?? {};
-      if (String(notes.org_id) !== org.id) return NextResponse.json({ error: "Payment link does not belong to this workspace" }, { status: 403 });
-
-      if (await alreadyProcessedEvent(`payment_link_verify:${razorpay_payment_link_id}`)) {
-        return NextResponse.json({ ok: true, deduped: true });
-      }
-
-      if (notes.kind === "plan") {
+      } else if (notes.kind === "plan") {
         const interval = notes.interval as BillingInterval;
         const now = Math.floor(Date.now() / 1000);
         await applyPlanActivation(org.id, {
           tier: notes.tier as Exclude<PlanTier, "free">,
           interval,
           currency: notes.currency as Currency,
-          subscriptionId: paymentLink.id,
+          subscriptionId: razorpay_order_id,
           currentStart: now,
           currentEnd: now + (interval === "yearly" ? 365 : 30) * 24 * 60 * 60,
         });
         await recordCouponIfPresent(notes, org.id, "plan_subscription");
       } else if (notes.kind === "addon_seat") {
-        await applyAddonSeatActivation(org.id, { subscriptionId: paymentLink.id, quantity: Number(notes.quantity ?? 1) });
+        await applyAddonSeatActivation(org.id, { subscriptionId: razorpay_order_id, quantity: Number(notes.quantity ?? 1) });
         await recordCouponIfPresent(notes, org.id, "plan_subscription");
       }
       return NextResponse.json({ ok: true });

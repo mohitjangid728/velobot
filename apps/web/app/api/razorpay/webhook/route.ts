@@ -41,17 +41,12 @@ interface RazorpayPaymentEntity {
   id: string;
   subscription_id?: string | null;
 }
-interface RazorpayPaymentLinkEntity {
-  id: string;
-  notes?: Record<string, string | number>;
-}
 interface RazorpayWebhookBody {
   event: string;
   payload: {
     subscription?: { entity: RazorpaySubscriptionEntity };
     order?: { entity: RazorpayOrderEntity };
     payment?: { entity: RazorpayPaymentEntity };
-    payment_link?: { entity: RazorpayPaymentLinkEntity };
   };
 }
 
@@ -81,42 +76,8 @@ export async function POST(req: Request) {
   const subscription = body.payload.subscription?.entity;
   const order = body.payload.order?.entity;
   const payment = body.payload.payment?.entity;
-  const paymentLink = body.payload.payment_link?.entity;
 
   switch (body.event) {
-    // Plan/seat purchases go out as Payment Links, not Subscriptions (see
-    // checkout/route.ts's doc comment) — this is the authoritative,
-    // Razorpay-driven confirmation; app/api/razorpay/verify/route.ts
-    // applies the same activation immediately when the browser returns
-    // from the callback_url, for fast UX when the webhook is delayed.
-    // Payment Links have no ongoing subscription to renew or cancel, so
-    // unlike the subscription.* cases below there's no cancelled/halted
-    // counterpart here — see applyPlanActivation's doc comment for what
-    // that means for renewal.
-    case "payment_link.paid": {
-      if (!paymentLink) break;
-      const notes = paymentLink.notes ?? {};
-      const orgId = notes.org_id ? String(notes.org_id) : null;
-      if (!orgId) break;
-
-      if (notes.kind === "plan") {
-        const interval = notes.interval as BillingInterval;
-        const now = Math.floor(Date.now() / 1000);
-        await applyPlanActivation(orgId, {
-          tier: notes.tier as Exclude<PlanTier, "free">,
-          interval,
-          currency: notes.currency as Currency,
-          subscriptionId: paymentLink.id,
-          currentStart: now,
-          currentEnd: now + PERIOD_SECONDS_BY_INTERVAL[interval],
-        });
-        await recordCouponIfPresent(notes, orgId, "plan_subscription");
-      } else if (notes.kind === "addon_seat") {
-        await applyAddonSeatActivation(orgId, { subscriptionId: paymentLink.id, quantity: Number(notes.quantity ?? 1) });
-        await recordCouponIfPresent(notes, orgId, "plan_subscription");
-      }
-      break;
-    }
     case "subscription.activated":
     case "subscription.charged": {
       if (!subscription) break;
@@ -165,12 +126,41 @@ export async function POST(req: Request) {
       if (!order) break;
       const notes = order.notes ?? {};
       const orgId = notes.org_id ? String(notes.org_id) : null;
-      if (!orgId || notes.kind !== "addon_messages") break;
-      // Guard against the verify route already having credited this same
+      if (!orgId) break;
+      // Guard against the verify route already having applied this same
       // order — see app/api/razorpay/verify/route.ts's matching check.
+      // This route and that one race (client callback vs. webhook); this
+      // is what makes double-firing a no-op instead of a double-credit.
       if (await alreadyProcessedEvent(`order_verify:${order.id}`)) break;
-      await applyAddonMessagesCredit(orgId, { quantity: Number(notes.quantity ?? 1) });
-      await recordCouponIfPresent(notes, orgId, "messages_addon");
+
+      if (notes.kind === "addon_messages") {
+        await applyAddonMessagesCredit(orgId, { quantity: Number(notes.quantity ?? 1) });
+        await recordCouponIfPresent(notes, orgId, "messages_addon");
+      } else if (notes.kind === "plan") {
+        // Plan purchases go out as plain Orders, not Subscriptions (see
+        // checkout/route.ts's doc comment) — this is the authoritative,
+        // Razorpay-driven confirmation; verify/route.ts applies the same
+        // activation immediately when the client-side handler fires, for
+        // fast UX when this webhook is delayed. An Order has no ongoing
+        // subscription to renew or cancel, so unlike the subscription.*
+        // cases above there's no cancelled/halted counterpart here — see
+        // applyPlanActivation's doc comment for what that means for
+        // renewal.
+        const interval = notes.interval as BillingInterval;
+        const now = Math.floor(Date.now() / 1000);
+        await applyPlanActivation(orgId, {
+          tier: notes.tier as Exclude<PlanTier, "free">,
+          interval,
+          currency: notes.currency as Currency,
+          subscriptionId: order.id,
+          currentStart: now,
+          currentEnd: now + PERIOD_SECONDS_BY_INTERVAL[interval],
+        });
+        await recordCouponIfPresent(notes, orgId, "plan_subscription");
+      } else if (notes.kind === "addon_seat") {
+        await applyAddonSeatActivation(orgId, { subscriptionId: order.id, quantity: Number(notes.quantity ?? 1) });
+        await recordCouponIfPresent(notes, orgId, "plan_subscription");
+      }
       break;
     }
 

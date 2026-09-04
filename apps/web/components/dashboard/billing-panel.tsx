@@ -1,7 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
+import { useState } from "react";
 import { format } from "date-fns";
 import { CheckCircle2, Sparkles } from "lucide-react";
 import { getEffectivePlan, type Organization, type PlanTier, type BillingInterval, type Currency, type PlanPriceOverrideMap, type PlanOverrideMap } from "@velobot/shared";
@@ -9,6 +8,8 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { Dialog, DialogContent, DialogHeader, DialogBody, DialogTitle } from "@/components/ui/dialog";
 import { PricingTable } from "@/components/billing/pricing-table";
 import { CheckoutModal } from "@/components/billing/checkout-modal";
@@ -53,34 +54,11 @@ export function BillingPanel({
   /** Carried from the pricing page via signup/onboarding's query string — opens Checkout immediately instead of landing on Free. */
   initialCheckoutRequest?: CheckoutSessionInput | null;
 }) {
-  const router = useRouter();
   const [pricingOpen, setPricingOpen] = useState(false);
   const [checkoutRequest, setCheckoutRequest] = useState<CheckoutSessionInput | null>(initialCheckoutRequest ?? null);
-
-  useEffect(() => {
-    // Razorpay's Payment Link callback_url (see checkout/route.ts) lands
-    // the browser back here with these query params after payment — verify
-    // + activate immediately rather than waiting on the webhook, which is
-    // still the authoritative fallback if this call never fires.
-    const params = new URLSearchParams(window.location.search);
-    const paymentLinkId = params.get("razorpay_payment_link_id");
-    if (!paymentLinkId) return;
-    const body = {
-      razorpay_payment_id: params.get("razorpay_payment_id"),
-      razorpay_payment_link_id: paymentLinkId,
-      razorpay_payment_link_reference_id: params.get("razorpay_payment_link_reference_id") ?? "",
-      razorpay_payment_link_status: params.get("razorpay_payment_link_status"),
-      razorpay_signature: params.get("razorpay_signature"),
-    };
-    window.history.replaceState(null, "", window.location.pathname);
-    fetch("/api/razorpay/verify", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(body),
-    }).then(() => router.refresh());
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
   const [addonOpen, setAddonOpen] = useState<"messages" | "seat" | null>(null);
+  const [showCouponField, setShowCouponField] = useState(false);
+  const [couponCode, setCouponCode] = useState("");
 
   const plan = getEffectivePlan(org.plan, planOverrides);
   const messageLimit = plan.quota.messagesPerMonth + org.addon_message_balance;
@@ -88,7 +66,15 @@ export function BillingPanel({
 
   function handleSelectPlan(tier: Exclude<PlanTier, "free">, interval: BillingInterval, currency: Currency) {
     setPricingOpen(false);
-    setCheckoutRequest({ kind: "plan", tier, interval, currency });
+    setCheckoutRequest({
+      kind: "plan",
+      tier,
+      interval,
+      currency,
+      ...(couponCode.trim() ? { couponCode: couponCode.trim() } : {}),
+    });
+    setShowCouponField(false);
+    setCouponCode("");
   }
 
   return (
@@ -187,6 +173,29 @@ export function BillingPanel({
               priceOverrides={priceOverrides}
               planOverrides={planOverrides}
             />
+            <div className="mt-4 flex flex-col items-center gap-2">
+              {showCouponField ? (
+                <div className="flex w-full max-w-xs flex-col gap-1.5">
+                  <Label htmlFor="plan-coupon-code">Coupon code</Label>
+                  <Input
+                    id="plan-coupon-code"
+                    placeholder="e.g. LAUNCH20"
+                    value={couponCode}
+                    onChange={(e) => setCouponCode(e.target.value.toUpperCase())}
+                    autoFocus
+                  />
+                  <p className="text-xs text-muted-foreground">Applied automatically when you pick a plan above.</p>
+                </div>
+              ) : (
+                <button
+                  type="button"
+                  className="text-sm text-muted-foreground underline-offset-4 hover:text-foreground hover:underline"
+                  onClick={() => setShowCouponField(true)}
+                >
+                  Have a coupon code?
+                </button>
+              )}
+            </div>
           </DialogBody>
         </DialogContent>
       </Dialog>

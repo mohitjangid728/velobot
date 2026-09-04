@@ -23,6 +23,8 @@ export function AddonModal({
 }) {
   const [quantity, setQuantity] = useState(1);
   const [checkoutOpen, setCheckoutOpen] = useState(false);
+  const [showCouponField, setShowCouponField] = useState(false);
+  const [couponCode, setCouponCode] = useState("");
   const def = ADDONS[addon];
   const total = def.price[currency] * quantity;
 
@@ -56,6 +58,26 @@ export function AddonModal({
               {total.toLocaleString()}
               {addon === "seat" ? "/mo" : ""}
             </p>
+            {showCouponField ? (
+              <div className="flex flex-col gap-1.5">
+                <Label htmlFor="addon-coupon-code">Coupon code</Label>
+                <Input
+                  id="addon-coupon-code"
+                  placeholder="e.g. LAUNCH20"
+                  value={couponCode}
+                  onChange={(e) => setCouponCode(e.target.value.toUpperCase())}
+                  autoFocus
+                />
+              </div>
+            ) : (
+              <button
+                type="button"
+                className="self-start text-sm text-muted-foreground underline-offset-4 hover:text-foreground hover:underline"
+                onClick={() => setShowCouponField(true)}
+              >
+                Have a coupon code?
+              </button>
+            )}
           </DialogBody>
           <DialogFooter>
             <Button onClick={() => setCheckoutOpen(true)} className="w-full">
@@ -72,7 +94,7 @@ export function AddonModal({
           if (!next) onOpenChange(false);
         }}
         title={`Buy ${label}`}
-        request={{ kind: "addon", addon, currency, quantity }}
+        request={{ kind: "addon", addon, currency, quantity, ...(couponCode.trim() ? { couponCode: couponCode.trim() } : {}) }}
       />
     </>
   );
