@@ -2,19 +2,18 @@
 
 import { useState } from "react";
 import { format } from "date-fns";
-import { CheckCircle2, Sparkles } from "lucide-react";
+import { CheckCircle2, Sparkles, Crown } from "lucide-react";
 import { getEffectivePlan, type Organization, type PlanTier, type BillingInterval, type Currency, type PlanPriceOverrideMap, type PlanOverrideMap } from "@velobot/shared";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Dialog, DialogContent, DialogHeader, DialogBody, DialogTitle } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogBody, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { PricingTable } from "@/components/billing/pricing-table";
 import { CheckoutModal } from "@/components/billing/checkout-modal";
 import { AddonModal } from "@/components/billing/addon-modal";
 import { ManageSubscriptionPanel } from "@/components/dashboard/manage-subscription-panel";
+import { CouponField } from "@/components/billing/coupon-field";
 import type { CheckoutSessionInput } from "@velobot/shared";
 import type { UsageSummary } from "@/lib/billing/usage";
 
@@ -57,8 +56,7 @@ export function BillingPanel({
   const [pricingOpen, setPricingOpen] = useState(false);
   const [checkoutRequest, setCheckoutRequest] = useState<CheckoutSessionInput | null>(initialCheckoutRequest ?? null);
   const [addonOpen, setAddonOpen] = useState<"messages" | "seat" | null>(null);
-  const [showCouponField, setShowCouponField] = useState(false);
-  const [couponCode, setCouponCode] = useState("");
+  const [appliedCoupon, setAppliedCoupon] = useState<string | null>(null);
 
   const plan = getEffectivePlan(org.plan, planOverrides);
   const messageLimit = plan.quota.messagesPerMonth + org.addon_message_balance;
@@ -71,18 +69,22 @@ export function BillingPanel({
       tier,
       interval,
       currency,
-      ...(couponCode.trim() ? { couponCode: couponCode.trim() } : {}),
+      ...(appliedCoupon ? { couponCode: appliedCoupon } : {}),
     });
-    setShowCouponField(false);
-    setCouponCode("");
+    setAppliedCoupon(null);
   }
 
   return (
     <div className="flex flex-col gap-6">
-      <Card>
+      <Card className={org.plan !== "free" ? "border-primary/25 bg-gradient-to-br from-primary/[0.04] to-transparent" : undefined}>
         <CardHeader>
           <div className="flex flex-wrap items-center justify-between gap-2">
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2.5">
+              {org.plan !== "free" && (
+                <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-primary/10">
+                  <Crown className="h-4 w-4 text-primary" />
+                </div>
+              )}
               <CardTitle>{plan.name} plan</CardTitle>
               <Badge variant={org.plan === "free" ? "secondary" : "success"}>
                 {org.billing_interval === "yearly" ? "Yearly" : org.plan === "free" ? "Free" : "Monthly"}
@@ -163,6 +165,7 @@ export function BillingPanel({
         <DialogContent className="max-w-5xl">
           <DialogHeader>
             <DialogTitle>Choose a plan</DialogTitle>
+            <DialogDescription>Upgrade or switch tiers any time — billed once, no auto-renewal.</DialogDescription>
           </DialogHeader>
           <DialogBody>
             <PricingTable
@@ -173,28 +176,13 @@ export function BillingPanel({
               priceOverrides={priceOverrides}
               planOverrides={planOverrides}
             />
-            <div className="mt-4 flex flex-col items-center gap-2">
-              {showCouponField ? (
-                <div className="flex w-full max-w-xs flex-col gap-1.5">
-                  <Label htmlFor="plan-coupon-code">Coupon code</Label>
-                  <Input
-                    id="plan-coupon-code"
-                    placeholder="e.g. LAUNCH20"
-                    value={couponCode}
-                    onChange={(e) => setCouponCode(e.target.value.toUpperCase())}
-                    autoFocus
-                  />
-                  <p className="text-xs text-muted-foreground">Applied automatically when you pick a plan above.</p>
-                </div>
-              ) : (
-                <button
-                  type="button"
-                  className="text-sm text-muted-foreground underline-offset-4 hover:text-foreground hover:underline"
-                  onClick={() => setShowCouponField(true)}
-                >
-                  Have a coupon code?
-                </button>
-              )}
+            <div className="mt-5 flex flex-col items-center gap-2 border-t pt-5">
+              <CouponField
+                purchaseKind="plan_subscription"
+                currency={org.currency}
+                onApplied={setAppliedCoupon}
+                onCleared={() => setAppliedCoupon(null)}
+              />
             </div>
           </DialogBody>
         </DialogContent>
@@ -202,7 +190,16 @@ export function BillingPanel({
 
       <CheckoutModal
         open={!!checkoutRequest}
-        onOpenChange={(next) => !next && setCheckoutRequest(null)}
+        // Dismissing Checkout (e.g. after a payment error) returns to the
+        // plan picker rather than closing the whole flow — the coupon was
+        // already validated before getting here, but a genuine Razorpay-
+        // side failure shouldn't cost the user their plan selection too.
+        onOpenChange={(next) => {
+          if (!next) {
+            setCheckoutRequest(null);
+            setPricingOpen(true);
+          }
+        }}
         title="Complete your upgrade"
         request={checkoutRequest}
       />

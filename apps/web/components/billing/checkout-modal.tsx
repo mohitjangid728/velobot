@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import Script from "next/script";
 import { useRouter } from "next/navigation";
+import { Loader2, CheckCircle2, AlertCircle } from "lucide-react";
 import { Dialog, DialogContent, DialogHeader, DialogBody, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { trackEvent } from "@/lib/analytics/posthog";
@@ -156,31 +157,46 @@ export function CheckoutModal({
           </DialogHeader>
           <DialogBody>
             {!KEY_ID ? (
-              <div className="py-8 text-center text-sm">
-                <p className="font-medium text-status-critical">Checkout isn&apos;t configured yet.</p>
-                <p className="mt-1 text-muted-foreground">
-                  Set <code className="rounded bg-muted px-1 py-0.5 text-xs">NEXT_PUBLIC_RAZORPAY_KEY_ID</code> in{" "}
-                  <code className="rounded bg-muted px-1 py-0.5 text-xs">.env.example</code> to enable billing.
-                </p>
+              <div className="flex flex-col items-center gap-3 py-8 text-center">
+                <AlertCircle className="h-9 w-9 text-status-critical" />
+                <div>
+                  <p className="text-sm font-medium text-status-critical">Checkout isn&apos;t configured yet.</p>
+                  <p className="mt-1 text-sm text-muted-foreground">
+                    Set <code className="rounded bg-muted px-1 py-0.5 text-xs">NEXT_PUBLIC_RAZORPAY_KEY_ID</code> in{" "}
+                    <code className="rounded bg-muted px-1 py-0.5 text-xs">.env.example</code> to enable billing.
+                  </p>
+                </div>
               </div>
             ) : freeActivationDone ? (
-              <p className="py-8 text-center text-sm text-status-good">
-                Your coupon covered the full amount — no payment needed. You&apos;re all set!
-              </p>
+              <div className="flex flex-col items-center gap-3 py-8 text-center">
+                <CheckCircle2 className="h-9 w-9 text-status-good" />
+                <p className="text-sm font-medium text-status-good">
+                  Your coupon covered the full amount — no payment needed. You&apos;re all set!
+                </p>
+              </div>
             ) : error ? (
-              <p className="py-8 text-center text-sm text-status-critical">{error}</p>
+              <div className="flex flex-col items-center gap-3 py-8 text-center">
+                <AlertCircle className="h-9 w-9 text-status-critical" />
+                <p className="text-sm font-medium text-status-critical">{error}</p>
+              </div>
             ) : (
-              <p className="py-8 text-center text-sm text-muted-foreground">Preparing checkout...</p>
+              <div className="flex flex-col items-center gap-3 py-8 text-center">
+                <Loader2 className="h-8 w-8 animate-spin text-primary" />
+                <p className="text-sm text-muted-foreground">Preparing checkout...</p>
+              </div>
             )}
           </DialogBody>
           {KEY_ID && error && request && (
             <DialogFooter>
+              <Button variant="outline" onClick={() => onOpenChange(false)} className="flex-1">
+                Cancel
+              </Button>
               <Button
                 onClick={() => {
                   startedForRequest.current = null;
                   void startCheckout(request);
                 }}
-                className="w-full"
+                className="flex-1"
               >
                 Try again
               </Button>
