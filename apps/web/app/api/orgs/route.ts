@@ -5,6 +5,7 @@ import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { ACTIVE_ORG_COOKIE, getCurrentUser } from "@/lib/auth/session";
 import { isPlatformAdmin } from "@/lib/auth/platform-admin";
 import { getPlanOverride } from "@/lib/billing/plan-overrides";
+import { sendWelcomeEmail } from "@/lib/notifications/welcome-email";
 
 function slugify(name: string) {
   return (
@@ -53,6 +54,14 @@ export async function POST(req: NextRequest) {
     .insert({ org_id: org.id, user_id: user.id, role: "admin", status: "active" });
   if (memberError) {
     return NextResponse.json({ error: memberError.message }, { status: 500 });
+  }
+
+  if (user.email) {
+    // sendEmail swallows its own errors (logs and returns) rather than
+    // throwing, so a Resend hiccup can never fail workspace creation —
+    // awaited only so the send has actually been attempted before this
+    // handler returns, matching every other sendEmail call site.
+    await sendWelcomeEmail(user.email, { orgName: org.name });
   }
 
   const res = NextResponse.json({ org });
