@@ -50,7 +50,11 @@ export function SourcesPanel({
     const res = await fetch(`/api/bots/${bot.id}/sources/website`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ url, max_pages: 150 }),
+      // Capped to whatever headroom the plan actually has left — the API
+      // clamps this too, but sending an honest number here means a Free
+      // plan with e.g. 5 pages remaining asks for (and gets) up to 5
+      // rather than requesting 150 and finding out the real number later.
+      body: JSON.stringify({ url, max_pages: Math.max(1, Math.min(150, remaining)) }),
     });
     const body = await res.json();
     setCrawling(false);
@@ -119,19 +123,25 @@ export function SourcesPanel({
             <CardDescription>We&apos;ll follow the sitemap (or links from the root URL) and extract clean text.</CardDescription>
           </CardHeader>
           <CardContent>
-            <form onSubmit={addWebsite} className="flex gap-2">
-              <Input
-                type="url"
-                required
-                placeholder="https://yoursite.com"
-                value={url}
-                onChange={(e) => setUrl(e.target.value)}
-                disabled={crawling}
-              />
-              <Button type="submit" disabled={crawling}>
-                {crawling ? <Loader2 className="h-4 w-4 animate-spin" /> : "Crawl"}
-              </Button>
-            </form>
+            {remaining <= 0 ? (
+              <p className="text-sm text-muted-foreground">
+                You&apos;ve used all {pagesLimit.toLocaleString()} indexed pages on your plan. Upgrade to crawl more.
+              </p>
+            ) : (
+              <form onSubmit={addWebsite} className="flex gap-2">
+                <Input
+                  type="url"
+                  required
+                  placeholder="https://yoursite.com"
+                  value={url}
+                  onChange={(e) => setUrl(e.target.value)}
+                  disabled={crawling}
+                />
+                <Button type="submit" disabled={crawling}>
+                  {crawling ? <Loader2 className="h-4 w-4 animate-spin" /> : "Crawl"}
+                </Button>
+              </form>
+            )}
           </CardContent>
         </Card>
 

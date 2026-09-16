@@ -15,8 +15,8 @@ vi.mock("@/lib/billing/usage", () => ({
   getPeriodStart: vi.fn(() => new Date()),
 }));
 
-import { assertCanCreateBot, assertCanSendAiMessage, assertHasCapability } from "@/lib/billing/guards";
-import { getBotCount, getMessagesUsedThisPeriod } from "@/lib/billing/usage";
+import { assertCanCreateBot, assertCanIngestPages, assertCanSendAiMessage, assertHasCapability } from "@/lib/billing/guards";
+import { getBotCount, getMessagesUsedThisPeriod, getPagesIndexed } from "@/lib/billing/usage";
 
 function org(overrides: Partial<Organization>): Organization {
   return {
@@ -79,6 +79,32 @@ describe("assertCanCreateBot", () => {
     vi.mocked(getBotCount).mockResolvedValue(5);
     const result = await assertCanCreateBot("org-1");
     expect(result.allowed).toBe(true);
+  });
+});
+
+describe("assertCanIngestPages", () => {
+  it("clamps an oversized request down to remaining headroom instead of rejecting it outright — the crawl route's max_pages is an arbitrary safety cap, not a real ask for that many pages", async () => {
+    mockAdmin.client = mockClientFor(org({ plan: "free" })); // free tier page limit: 20
+    vi.mocked(getPagesIndexed).mockResolvedValue(0);
+    const result = await assertCanIngestPages("org-1", 150);
+    expect(result.allowed).toBe(true);
+    expect(result.allowedPages).toBe(20);
+  });
+
+  it("returns the full requested amount when it fits within headroom", async () => {
+    mockAdmin.client = mockClientFor(org({ plan: "free" }));
+    vi.mocked(getPagesIndexed).mockResolvedValue(0);
+    const result = await assertCanIngestPages("org-1", 5);
+    expect(result.allowed).toBe(true);
+    expect(result.allowedPages).toBe(5);
+  });
+
+  it("blocks only once there's zero headroom left", async () => {
+    mockAdmin.client = mockClientFor(org({ plan: "free" }));
+    vi.mocked(getPagesIndexed).mockResolvedValue(20);
+    const result = await assertCanIngestPages("org-1", 150);
+    expect(result.allowed).toBe(false);
+    expect(result.reason).toMatch(/Free plan allows up to 20 indexed pages \(20 used\)/);
   });
 });
 

@@ -34,18 +34,33 @@ export async function assertCanCreateBot(orgId: string): Promise<GuardResult> {
   return { allowed: true };
 }
 
-/** `incomingPages` is the number of NEW pages a crawl/upload is about to add — checked before ingestion runs, not after. */
-export async function assertCanIngestPages(orgId: string, incomingPages: number): Promise<GuardResult> {
+export interface IngestPagesGuardResult extends GuardResult {
+  /**
+   * The number of pages this request may actually ingest — min(requestedPages,
+   * remaining plan headroom). Only set when allowed. A website crawl's
+   * requestedPages is an arbitrary safety cap (see sources/website/route.ts),
+   * not a real ask for that many pages, so it must be clamped down to
+   * whatever headroom remains rather than rejecting the whole request just
+   * because the cap itself exceeds the plan limit — otherwise a Free-plan
+   * org with 20 pages of totally unused headroom gets blocked before a
+   * single page is crawled, which is exactly what this field prevents.
+   */
+  allowedPages?: number;
+}
+
+/** `requestedPages` is the most pages a crawl/upload might add this request — checked before ingestion runs, not after, and clamped to actual remaining headroom rather than treated as a fixed ask (see allowedPages doc above). */
+export async function assertCanIngestPages(orgId: string, requestedPages: number): Promise<IngestPagesGuardResult> {
   const { org, plan } = await loadOrgAndPlan(orgId);
   const limit = plan.quota.pages;
   const used = await getPagesIndexed(orgId);
-  if (used + incomingPages > limit) {
+  const remaining = limit - used;
+  if (remaining <= 0) {
     return {
       allowed: false,
       reason: `Your ${plan.name} plan allows up to ${limit} indexed pages (${used} used). Upgrade to index more.`,
     };
   }
-  return { allowed: true };
+  return { allowed: true, allowedPages: Math.min(requestedPages, remaining) };
 }
 
 export interface MessageGuardResult extends GuardResult {

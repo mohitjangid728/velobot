@@ -18,11 +18,15 @@ export async function POST(req: NextRequest, { params }: { params: { botId: stri
   const parsed = IngestWebsiteSchema.safeParse(await req.json());
   if (!parsed.success) return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 });
 
-  // Checked against the requested max_pages cap, not the (unknown until
-  // after crawling) actual page count — this fails fast with a clear
-  // message instead of running a potentially long crawl only to discard it.
+  // parsed.data.max_pages is an arbitrary safety cap on the crawl, not a
+  // real request for that many pages, so a plan with any headroom at all
+  // should still crawl (up to that headroom) rather than being rejected
+  // outright just because the cap itself exceeds the plan limit — see
+  // allowedPages's doc comment in guards.ts. Only a plan with zero
+  // remaining headroom is rejected here, before any crawling happens.
   const pagesGuard = await assertCanIngestPages(guard.bot.org_id, parsed.data.max_pages);
   if (!pagesGuard.allowed) return NextResponse.json({ error: pagesGuard.reason }, { status: 402 });
+  const maxPages = pagesGuard.allowedPages ?? parsed.data.max_pages;
 
   const admin = createSupabaseAdminClient();
   const { data: source, error: sourceError } = await admin
@@ -35,7 +39,7 @@ export async function POST(req: NextRequest, { params }: { params: { botId: stri
   }
 
   try {
-    const pages = await crawlWebsite(parsed.data.url, { maxPages: parsed.data.max_pages });
+    const pages = await crawlWebsite(parsed.data.url, { maxPages });
     await admin.from("knowledge_sources").update({ status: "processing", pages_crawled: pages.length }).eq("id", source.id);
 
     const { chunksIngested } = await ingestDocuments(
