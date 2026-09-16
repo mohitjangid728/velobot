@@ -48,8 +48,13 @@ export const config = {
     /*
      * Match all routes except static assets and Next internals. API routes
      * are matched too (so the session cookie stays fresh) but are exempted
-     * from the auth redirect above.
+     * from the auth redirect above. .js is excluded alongside the image
+     * extensions for /widget.js (see public/widget.js, built from
+     * apps/widget) — any customer's website embeds it anonymously, so a
+     * script tag must always get the real file back, never a redirect to
+     * /login (the browser rejects the HTML response as an invalid
+     * cross-origin script and the widget never loads at all).
      */
-    "/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)",
+    "/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp|js|js\\.map)$).*)",
   ],
 };
