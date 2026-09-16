@@ -87,7 +87,7 @@ export function renderTypingIndicator(): HTMLElement {
   );
   wrap.dataset.typingIndicator = "true";
   for (let i = 0; i < 3; i++) {
-    const dot = el("span", "vb-h-1.5 vb-w-1.5 vb-rounded-full vb-bg-slate-400 vb-animate-pulse");
+    const dot = el("span", "vb-h-1.5 vb-w-1.5 vb-rounded-full vb-bg-slate-400 vb-animate-bounce");
     dot.style.animationDelay = `${i * 150}ms`;
     wrap.appendChild(dot);
   }

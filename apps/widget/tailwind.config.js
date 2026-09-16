@@ -25,11 +25,28 @@ export default {
           from: { opacity: "0", transform: "scale(0.5)" },
           to: { opacity: "1", transform: "scale(1)" },
         },
+        "vb-icon-pop": {
+          "0%": { opacity: "0", transform: "scale(0.4) rotate(-20deg)" },
+          "60%": { opacity: "1", transform: "scale(1.15) rotate(4deg)" },
+          "100%": { opacity: "1", transform: "scale(1) rotate(0)" },
+        },
+        "vb-badge-pop": {
+          "0%": { transform: "scale(0.5)" },
+          "60%": { transform: "scale(1.25)" },
+          "100%": { transform: "scale(1)" },
+        },
+        "vb-ring-ping": {
+          "0%": { transform: "scale(1)", opacity: "0.55" },
+          "100%": { transform: "scale(1.6)", opacity: "0" },
+        },
       },
       animation: {
         "vb-fade-in": "vb-fade-in 150ms ease-out",
         "vb-panel-in": "vb-panel-in 200ms cubic-bezier(0.16, 1, 0.3, 1)",
         "vb-launcher-in": "vb-launcher-in 250ms cubic-bezier(0.34, 1.56, 0.64, 1)",
+        "vb-icon-pop": "vb-icon-pop 280ms cubic-bezier(0.34, 1.56, 0.64, 1)",
+        "vb-badge-pop": "vb-badge-pop 280ms cubic-bezier(0.34, 1.56, 0.64, 1)",
+        "vb-ring-ping": "vb-ring-ping 2.2s cubic-bezier(0, 0, 0.2, 1) infinite",
       },
     },
   },

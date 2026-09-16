@@ -73,15 +73,31 @@ export function mountWidget(config: WidgetConfig): WidgetElements {
   // ── Launcher ─────────────────────────────────────────────────────────
   const launcherButton = el(
     "button",
-    "vb-fixed vb-bottom-5 vb-right-5 vb-z-[2147483000] vb-flex vb-h-14 vb-w-14 vb-items-center vb-justify-center vb-rounded-full vb-text-white vb-transition-all vb-duration-200 hover:vb-scale-105 vb-animate-vb-launcher-in"
+    "vb-fixed vb-bottom-5 vb-right-5 vb-z-[2147483000] vb-flex vb-h-14 vb-w-14 vb-items-center vb-justify-center vb-rounded-full vb-text-white vb-transition-all vb-duration-200 hover:vb-scale-105 active:vb-scale-95 vb-animate-vb-launcher-in"
   ) as HTMLButtonElement;
   launcherButton.style.backgroundColor = config.themeColor;
   launcherButton.style.boxShadow = `0 10px 25px -5px ${config.themeColor}66, 0 8px 10px -6px ${config.themeColor}4d`;
   launcherButton.style.position = "fixed";
   launcherButton.setAttribute("aria-label", t("openChat"));
 
-  const launcherIcon = el("span", "vb-flex vb-items-center vb-justify-center vb-transition-transform vb-duration-200");
+  // A soft, continuously expanding ring behind the launcher — draws the eye
+  // to the widget on first paint without being as insistent as a bounce
+  // loop. Hidden once the panel is open (see setOpen) so it doesn't fight
+  // with the close icon.
+  const launcherPulseRing = el("span", "vb-pointer-events-none vb-absolute vb-inset-0 vb-rounded-full vb-animate-vb-ring-ping");
+  launcherPulseRing.style.backgroundColor = config.themeColor;
+
+  const launcherIcon = el(
+    "span",
+    "vb-relative vb-flex vb-items-center vb-justify-center vb-transition-transform vb-duration-200"
+  );
   function renderLauncherIcon(open: boolean) {
+    // Re-triggers the pop-in keyframe on every icon swap (chat <-> close,
+    // or a custom launcherIconUrl) — removing the class and forcing a
+    // reflow before re-adding it, since just swapping innerHTML doesn't
+    // restart a CSS animation already attached to the element.
+    launcherIcon.classList.remove("vb-animate-vb-icon-pop");
+    void launcherIcon.offsetWidth;
     if (open) {
       launcherIcon.innerHTML = ICONS.close;
     } else if (config.launcherIconUrl) {
@@ -92,6 +108,7 @@ export function mountWidget(config: WidgetConfig): WidgetElements {
     } else {
       launcherIcon.innerHTML = ICONS.chat;
     }
+    launcherIcon.classList.add("vb-animate-vb-icon-pop");
   }
   renderLauncherIcon(false);
 
@@ -99,7 +116,7 @@ export function mountWidget(config: WidgetConfig): WidgetElements {
     "span",
     "vb-absolute vb--top-1 vb--right-1 vb-hidden vb-h-5 vb-min-w-[20px] vb-items-center vb-justify-center vb-rounded-full vb-border-2 vb-border-white vb-bg-red-500 vb-px-1 vb-text-[10px] vb-font-bold vb-text-white"
   ) as HTMLSpanElement;
-  launcherButton.append(launcherIcon, unreadBadge);
+  launcherButton.append(launcherPulseRing, launcherIcon, unreadBadge);
 
   // ── Panel ────────────────────────────────────────────────────────────
   const panel = el(
@@ -120,11 +137,15 @@ export function mountWidget(config: WidgetConfig): WidgetElements {
   if (config.avatarUrl) (avatar as HTMLImageElement).src = config.avatarUrl;
   avatarWrap.appendChild(avatar);
   if (config.agentsOnline) {
+    const onlineDotRing = el(
+      "span",
+      "vb-absolute vb--bottom-0.5 vb--right-0.5 vb-h-3 vb-w-3 vb-rounded-full vb-bg-emerald-400 vb-animate-vb-ring-ping"
+    );
     const onlineDot = el(
       "span",
       "vb-absolute vb--bottom-0.5 vb--right-0.5 vb-h-3 vb-w-3 vb-rounded-full vb-border-2 vb-border-[color:var(--vb-primary)] vb-bg-emerald-400"
     );
-    avatarWrap.appendChild(onlineDot);
+    avatarWrap.append(onlineDotRing, onlineDot);
   }
 
   const titleBlock = el("div", "vb-flex vb-min-w-0 vb-flex-1 vb-flex-col vb-gap-0.5");
@@ -215,7 +236,14 @@ export function mountWidget(config: WidgetConfig): WidgetElements {
     "vb-flex vb-items-center vb-justify-center vb-gap-1 vb-pt-0.5 vb-text-center vb-text-[10px] vb-text-slate-300"
   );
   const brandIcon = el("span", "vb-flex vb-h-2.5 vb-w-2.5 [&>svg]:vb-h-2.5 [&>svg]:vb-w-2.5", ICONS.bot);
-  const brandLabel = el("span", undefined, t("poweredBy"));
+  const brandLabel = el(
+    "a",
+    "vb-text-slate-300 vb-no-underline vb-transition-colors hover:vb-text-slate-500 hover:vb-underline",
+    t("poweredBy")
+  ) as HTMLAnchorElement;
+  brandLabel.href = __VELOBOT_API_BASE__;
+  brandLabel.target = "_blank";
+  brandLabel.rel = "noopener noreferrer";
   brandFooter.append(brandIcon, brandLabel);
 
   footer.append(talkToHumanButton, inputRow, ...(config.hideBranding ? [] : [brandFooter]));
@@ -286,6 +314,7 @@ export function mountWidget(config: WidgetConfig): WidgetElements {
     panel.classList.toggle("vb-hidden", !open);
     panel.classList.toggle("vb-flex", open);
     renderLauncherIcon(open);
+    launcherPulseRing.classList.toggle("vb-hidden", open);
     launcherButton.setAttribute("aria-label", open ? "Close chat" : "Open chat");
     if (open) {
       unreadBadge.classList.add("vb-hidden");
@@ -347,4 +376,9 @@ export function bumpUnreadBadge(badge: HTMLSpanElement, panelOpen: boolean) {
   badge.textContent = String(current + 1);
   badge.classList.remove("vb-hidden");
   badge.classList.add("vb-flex");
+  // Force a reflow so the pop keyframe restarts on every bump, not just the
+  // first time the badge appears.
+  badge.classList.remove("vb-animate-vb-badge-pop");
+  void badge.offsetWidth;
+  badge.classList.add("vb-animate-vb-badge-pop");
 }
