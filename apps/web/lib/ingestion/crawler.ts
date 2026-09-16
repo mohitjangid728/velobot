@@ -73,6 +73,19 @@ function isDisallowed(path: string, rules: string[]) {
   return rules.some((rule) => rule !== "" && path.startsWith(rule));
 }
 
+/**
+ * `www.example.com` and `example.com` are different origins per the URL
+ * spec, but the same site — and a sitemap frequently declares one host
+ * while the visitor submitted the other (or a link on the page points at
+ * the other form). Treating them as different origins silently drops every
+ * seed/link from a same-site page, so this loosens the check to protocol +
+ * port + www-normalized hostname instead of strict origin equality.
+ */
+function isSameSite(a: URL, b: URL): boolean {
+  const normalize = (hostname: string) => hostname.replace(/^www\./, "");
+  return a.protocol === b.protocol && a.port === b.port && normalize(a.hostname) === normalize(b.hostname);
+}
+
 async function discoverSitemapUrls(origin: string): Promise<string[]> {
   try {
     const res = await fetch(`${origin}/sitemap.xml`, { signal: AbortSignal.timeout(5000) });
@@ -103,7 +116,8 @@ export async function crawlWebsite(rootUrl: string, opts: CrawlOptions = {}): Pr
   const maxPages = Math.min(opts.maxPages ?? CRAWLER_MAX_PAGES, CRAWLER_MAX_PAGES);
   const maxDepth = opts.maxDepth ?? CRAWLER_MAX_DEPTH;
 
-  const origin = new URL(rootUrl).origin;
+  const rootUrlParsed = new URL(rootUrl);
+  const origin = rootUrlParsed.origin;
   const disallowRules = await fetchRobotsDisallowRules(origin);
   const sitemapUrls = await discoverSitemapUrls(origin);
 
@@ -125,7 +139,7 @@ export async function crawlWebsite(rootUrl: string, opts: CrawlOptions = {}): Pr
     } catch {
       continue;
     }
-    if (url.origin !== origin) continue;
+    if (!isSameSite(url, rootUrlParsed)) continue;
     if (isDisallowed(url.pathname, disallowRules)) continue;
 
     try {
@@ -151,7 +165,7 @@ export async function crawlWebsite(rootUrl: string, opts: CrawlOptions = {}): Pr
           try {
             const abs = new URL(href, normalized);
             abs.hash = "";
-            if (abs.origin === origin && !visited.has(abs.href)) {
+            if (isSameSite(abs, rootUrlParsed) && !visited.has(abs.href)) {
               queue.push({ url: abs.href, depth: next.depth + 1 });
             }
           } catch {
