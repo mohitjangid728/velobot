@@ -17,7 +17,7 @@
 // run doesn't re-notify for the same ticket.
 //
 // deno-lint-ignore-file no-explicit-any
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.4";
+import { createClient } from "npm:@supabase/supabase-js@2.45.4";
 
 const ESCALATION_ALERT_THRESHOLD_SECONDS = 60;
 
